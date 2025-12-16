@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>库存物品 - 物品库存管理系统</title>
+  <script src="https://res.gemcoder.com/js/reload.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#007AFF',
+            secondary: '#5AC8FA',
+            success: '#34C759',
+            warning: '#FF9500',
+            danger: '#FF3B30',
+            info: '#5856D6',
+            light: '#F5F7FA',
+            dark: '#1D1D1F',
+            'gray-light': '#E5E5EA',
+            'gray-medium': '#C7C7CC',
+            'gray-dark': '#8E8E93'
+          },
+          fontFamily: {
+            sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif']
+          },
+          boxShadow: {
+            'apple': '0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06)',
+            'apple-hover': '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)'
+          },
+          borderRadius: {
+            'apple': '12px',
+            'apple-sm': '8px'
+          }
+        }
+      }
+    };
+  </script>
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+      }
+      .text-balance {
+        text-wrap: balance;
+      }
+      .backdrop-blur-apple {
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+      }
+    }
+  </style>
+</head>
+<body class="bg-light font-sans text-dark antialiased min-h-screen flex flex-col">
+  <!-- 顶部导航栏 -->
+  <header class="bg-white/80 backdrop-blur-apple border-b border-gray-light sticky top-0 z-50">
+    <div class="container mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-4">
+        <div class="w-10 h-10 rounded-apple-sm bg-primary flex items-center justify-center text-white">
+          <i class="fas fa-boxes text-xl"></i>
+        </div>
+        <h1 class="text-xl font-semibold tracking-tight">库存管理系统</h1>
+      </div>
+      <div class="hidden md:flex relative flex-1 max-w-md mx-8">
+        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <i class="fas fa-search text-gray-dark"></i>
+        </div>
+        <input type="text" placeholder="搜索物品、类别或条形码..." class="w-full pl-10 pr-4 py-2 rounded-full bg-light border border-gray-light focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-200 text-sm" />
+      </div>
+      <div class="flex items-center space-x-4">
+        <button class="relative p-2 rounded-full hover:bg-light transition-colors duration-200">
+          <i class="fas fa-bell text-gray-dark"></i>
+          <span class="absolute top-1 right-1 w-2 h-2 bg-danger rounded-full"></span>
+        </button>
+        <div class="h-8 w-8 rounded-full bg-secondary/20 flex items-center justify-center text-secondary font-medium">JD</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="flex flex-1 overflow-hidden">
+    <!-- 侧边导航栏 -->
+    <aside class="w-16 md:w-64 bg-white border-r border-gray-light flex flex-col transition-all duration-300 ease-in-out z-40">
+      <nav class="flex-1 overflow-y-auto scrollbar-hide py-4">
+        <ul class="space-y-1 px-2">
+          <li><a href="index.html" class="flex items-center space-x-3 px-3 py-3 rounded-apple-sm text-gray-dark hover:bg-light transition-colors duration-200 group"><i class="fas fa-tachometer-alt text-xl w-6 text-center"></i><span class="hidden md:inline">仪表盘</span></a></li>
+          <li><a href="items.html" class="flex items-center space-x-3 px-3 py-3 rounded-apple-sm bg-primary/10 text-primary group"><i class="fas fa-box text-xl w-6 text-center"></i><span class="hidden md:inline font-medium">库存物品</span></a></li>
+          <li><a href="inbound.html" class="flex items-center space-x-3 px-3 py-3 rounded-apple-sm text-gray-dark hover:bg-light transition-colors duration-200 group"><i class="fas fa-shopping-cart text-xl w-6 text-center"></i><span class="hidden md:inline">入库管理</span></a></li>
+          <li><a href="outbound.html" class="flex items-center space-x-3 px-3 py-3 rounded-apple-sm text-gray-dark hover:bg-light transition-colors duration-200 group"><i class="fas fa-shipping-fast text-xl w-6 text-center"></i><span class="hidden md:inline">出库管理</span></a></li>
+          <li><a href="transfer.html" class="flex items-center space-x-3 px-3 py-3 rounded-apple-sm text-gray-dark hover:bg-light transition-colors duration-200 group"><i class="fas fa-exchange-alt text-xl w-6 text-center"></i><span class="hidden md:inline">库存调拨</span></a></li>
+          <li><a href="warehouse.html" class="flex items-center space-x-3 px-3 py-3 rounded-apple-sm text-gray-dark hover:bg-light transition-colors duration-200 group"><i class="fas fa-warehouse text-xl w-6 text-center"></i><span class="hidden md:inline">仓库管理</span></a></li>
+          <li><a href="supplier.html" class="flex items-center space-x-3 px-3 py-3 rounded-apple-sm text-gray-dark hover:bg-light transition-colors duration-200 group"><i class="fas fa-users text-xl w-6 text-center"></i><span class="hidden md:inline">供应商</span></a></li>
+          <li><a href="reports.html" class="flex items-center space-x-3 px-3 py-3 rounded-apple-sm text-gray-dark hover:bg-light transition-colors duration-200 group"><i class="fas fa-file-invoice text-xl w-6 text-center"></i><span class="hidden md:inline">报表分析</span></a></li>
+          <li><a href="settings.html" class="flex items-center space-x-3 px-3 py-3 rounded-apple-sm text-gray-dark hover:bg-light transition-colors duration-200 group"><i class="fas fa-cog text-xl w-6 text-center"></i><span class="hidden md:inline">系统设置</span></a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <!-- 主内容区域 -->
+    <main class="flex-1 overflow-y-auto bg-light p-4 md:p-6 scrollbar-hide">
+      <!-- 库存物品页面内容 -->
+      <div class="flex flex-col md:flex-row md:items-center justify-between mb-6">
+        <div>
+          <h2 class="text-2xl font-semibold tracking-tight">库存物品</h2>
+          <p class="text-gray-dark mt-1">管理所有库存物品信息</p>
+        </div>
+        <div class="flex space-x-3 mt-4 md:mt-0">
+          <button class="inline-flex items-center space-x-2 px-4 py-2 bg-white border border-gray-light rounded-apple-sm text-gray-dark hover:bg-gray-50 transition-colors duration-200">
+            <i class="fas fa-filter"></i>
+            <span>筛选</span>
+          </button>
+          <button id="add-item-btn" class="inline-flex items-center space-x-2 px-4 py-2 bg-primary text-white rounded-apple-sm hover:bg-primary/90 transition-colors duration-200 shadow-sm">
+            <i class="fas fa-plus"></i>
+            <span>添加物品</span>
+          </button>
+        </div>
+      </div>
+      
+      <div class="bg-white rounded-apple shadow-apple">
+        <div class="p-4 border-b border-gray-light">
+          <div class="flex flex-col md:flex-row md:items-center space-y-3 md:space-y-0 md:space-x-3">
+            <div class="flex-1">
+              <input type="text" id="items-search" placeholder="搜索物品名称或编码..." class="w-full px-4 py-2 border border-gray-light rounded-apple-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all">
+            </div>
+            <select id="category-filter" class="px-4 py-2 border border-gray-light rounded-apple-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary">
+              <option value="">所有类别</option>
+              <option value="electronics">电子设备</option>
+              <option value="office">办公用品</option>
+              <option value="materials">原材料</option>
+              <option value="products">成品</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="overflow-x-auto">
+          <table class="min-w-full">
+            <thead>
+              <tr class="border-b border-gray-light bg-light/50">
+                <th class="text-left py-3 px-4 text-sm font-medium text-gray-dark">物品信息</th>
+                <th class="text-left py-3 px-4 text-sm font-medium text-gray-dark">类别</th>
+                <th class="text-left py-3 px-4 text-sm font-medium text-gray-dark">库存</th>
+                <th class="text-left py-3 px-4 text-sm font-medium text-gray-dark">单价</th>
+                <th class="text-left py-3 px-4 text-sm font-medium text-gray-dark">仓位</th>
+                <th class="text-left py-3 px-4 text-sm font-medium text-gray-dark">状态</th>
+                <th class="text-left py-3 px-4 text-sm font-medium text-gray-dark">操作</th>
+              </tr>
+            </thead>
+            <tbody id="items-table-body">
+              <tr class="border-b border-gray-light hover:bg-light/50 transition-colors">
+                <td class="py-3 px-4" colspan="7">
+                  <div class="text-center text-gray-dark py-4">
+                    <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                    <p>加载中...</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        
+        <div class="p-4 border-t border-gray-light flex items-center justify-between">
+          <div class="text-sm text-gray-dark">
+            共 <span id="items-total">0</span> 条记录
+          </div>
+          <div class="flex space-x-2" id="items-pagination">
+            <!-- Pagination buttons will be inserted here -->
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+  <script src="/static/js/api-service.js?v=2"></script>
+</body>
+</html>

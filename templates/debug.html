@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>调试页面</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="p-8 bg-gray-100">
+    <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-6">
+        <h1 class="text-2xl font-bold mb-4">🔍 导航调试页面</h1>
+        
+        <div class="space-y-4">
+            <!-- 测试导航项 -->
+            <div class="border rounded p-4">
+                <h2 class="font-bold mb-2">测试导航项</h2>
+                <nav>
+                    <a href="javascript:void(0);" 
+                       data-page="test-page-1" 
+                       class="nav-item block p-2 bg-blue-100 mb-2 rounded hover:bg-blue-200">
+                        点击我 - 测试页面1
+                    </a>
+                    <a href="javascript:void(0);" 
+                       data-page="test-page-2" 
+                       class="nav-item block p-2 bg-green-100 mb-2 rounded hover:bg-green-200">
+                        点击我 - 测试页面2
+                    </a>
+                </nav>
+            </div>
+            
+            <!-- 日志输出 -->
+            <div class="border rounded p-4">
+                <h2 class="font-bold mb-2">📋 事件日志</h2>
+                <div id="log" class="bg-gray-50 p-3 rounded font-mono text-sm h-64 overflow-auto"></div>
+            </div>
+            
+            <!-- 检查结果 -->
+            <div class="border rounded p-4">
+                <h2 class="font-bold mb-2">✅ 检查结果</h2>
+                <div id="checks" class="space-y-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API客户端 -->
+    <script src="/static/js/api-service.js?v=2"></script>
+    
+    <!-- 应用脚本 -->
+    <script src="/static/js/app.js?v=2"></script>
+    
+    <script>
+        const logDiv = document.getElementById('log');
+        const checksDiv = document.getElementById('checks');
+        
+        function log(message, type = 'info') {
+            const time = new Date().toLocaleTimeString();
+            const colors = {
+                'info': 'text-blue-600',
+                'success': 'text-green-600',
+                'error': 'text-red-600',
+                'warning': 'text-yellow-600'
+            };
+            logDiv.innerHTML += `<div class="${colors[type]}">[${time}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function addCheck(label, passed, details = '') {
+            const icon = passed ? '✅' : '❌';
+            const color = passed ? 'text-green-600' : 'text-red-600';
+            checksDiv.innerHTML += `
+                <div class="${color}">
+                    ${icon} ${label}
+                    ${details ? `<span class="text-gray-600 text-sm ml-2">${details}</span>` : ''}
+                </div>
+            `;
+        }
+        
+        // 执行检查
+        log('🚀 开始检查...', 'info');
+        
+        // 1. 检查API对象
+        if (typeof API !== 'undefined') {
+            addCheck('API对象已加载', true);
+            log('✅ API对象存在', 'success');
+        } else {
+            addCheck('API对象已加载', false, 'API对象未定义');
+            log('❌ API对象不存在', 'error');
+        }
+        
+        // 2. 检查App对象
+        if (typeof App !== 'undefined') {
+            addCheck('App对象已加载', true);
+            log('✅ App对象存在', 'success');
+        } else {
+            addCheck('App对象已加载', false, 'App对象未定义');
+            log('❌ App对象不存在', 'error');
+        }
+        
+        // 3. 检查PageManager
+        if (typeof PageManager !== 'undefined') {
+            addCheck('PageManager已加载', true);
+            log('✅ PageManager存在', 'success');
+        } else {
+            addCheck('PageManager已加载', false, 'PageManager未定义');
+            log('❌ PageManager不存在', 'error');
+        }
+        
+        // 4. 检查导航项
+        const navItems = document.querySelectorAll('.nav-item');
+        addCheck('导航项数量', navItems.length > 0, `找到 ${navItems.length} 个`);
+        log(`📊 找到 ${navItems.length} 个导航项`, navItems.length > 0 ? 'success' : 'error');
+        
+        // 5. 手动绑定测试导航
+        log('🔧 手动绑定测试导航...', 'info');
+        navItems.forEach((item, index) => {
+            const pageId = item.getAttribute('data-page');
+            log(`  绑定导航 ${index + 1}: ${pageId}`, 'info');
+            
+            item.addEventListener('click', (e) => {
+                e.preventDefault();
+                log(`🖱️ 点击了: ${pageId}`, 'success');
+                alert(`导航点击成功！\n页面ID: ${pageId}`);
+            });
+        });
+        
+        addCheck('事件监听器已绑定', true, `${navItems.length} 个导航项`);
+        log('✅ 事件监听器绑定完成', 'success');
+        
+        // 6. 测试主页面的导航
+        log('🔍 检查主页面导航...', 'info');
+        setTimeout(() => {
+            const mainNavItems = window.parent.document.querySelectorAll('.nav-item');
+            if (mainNavItems.length > 0) {
+                addCheck('主页面导航项', true, `找到 ${mainNavItems.length} 个`);
+                log(`✅ 主页面有 ${mainNavItems.length} 个导航项`, 'success');
+            } else {
+                addCheck('主页面导航项', false, '未找到');
+                log('❌ 主页面没有导航项', 'error');
+            }
+        }, 100);
+        
+        log('✨ 检查完成！请点击上面的测试导航项', 'success');
+    </script>
+</body>
+</html>

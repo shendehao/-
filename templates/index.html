@@ -1,0 +1,3189 @@
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>物品库存管理系统</title>
+    <!-- 登录检查 - 必须在最前面执行 -->
+    <script>
+      (function() {
+        // 首先检查是否有token（localStorage或sessionStorage）
+        var token = localStorage.getItem('token') || sessionStorage.getItem('token');
+        
+        if (!token) {
+          // 没有token，跳转到登录页
+          window.location.href = '/login/';
+          return;
+        }
+        
+        // 如果是"记住我"模式，检查是否过期
+        var rememberMe = localStorage.getItem('remember_me');
+        var tokenExpire = localStorage.getItem('token_expire');
+        
+        if (rememberMe === 'true' && tokenExpire) {
+          var expireTime = parseInt(tokenExpire);
+          if (Date.now() > expireTime) {
+            // Token已过期，清除所有登录信息
+            localStorage.removeItem('token');
+            localStorage.removeItem('refresh_token');
+            localStorage.removeItem('user_info');
+            localStorage.removeItem('token_expire');
+            localStorage.removeItem('remember_me');
+            sessionStorage.removeItem('token');
+            sessionStorage.removeItem('refresh_token');
+            sessionStorage.removeItem('user_info');
+            window.location.href = '/login/';
+            return;
+          }
+        }
+        // 有有效token，继续加载页面
+      })();
+    </script>
+    <!-- 预连接CDN加速 -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <link rel="dns-prefetch" href="https://cdn.tailwindcss.com" />
+    <!-- 关键CSS优先加载 -->
+    <link href="/static/css/mobile.css" rel="stylesheet" />
+    <!-- Font Awesome - 使用更稳定的jsdelivr CDN -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <!-- Tailwind CSS - 关键 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js - 图表库，必须同步加载 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- 非关键JS延迟加载 -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js" defer></script>
+    <script src="https://res.gemcoder.com/js/reload.js" defer></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: '#007AFF',
+              secondary: '#5AC8FA',
+              success: '#34C759',
+              warning: '#FF9500',
+              danger: '#FF3B30',
+              info: '#5856D6',
+              light: '#F5F7FA',
+              dark: '#1D1D1F',
+              'gray-light': '#E5E5EA',
+              'gray-medium': '#C7C7CC',
+              'gray-dark': '#8E8E93'
+            },
+            fontFamily: {
+              sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif']
+            },
+            boxShadow: {
+              'apple': '0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06)',
+              'apple-hover': '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)'
+            },
+            borderRadius: {
+              'apple': '12px',
+              'apple-sm': '8px'
+            }
+          }
+        }
+      };
+    </script>
+    <style type="text/tailwindcss">
+      @layer utilities {
+          .content-auto {
+              content-visibility: auto;
+          }
+          .scrollbar-hide {
+              -ms-overflow-style: none;
+              scrollbar-width: none;
+          }
+          .scrollbar-hide::-webkit-scrollbar {
+              display: none;
+          }
+          .text-balance {
+              text-wrap: balance;
+          }
+          .backdrop-blur-apple {
+              backdrop-filter: blur(20px);
+              -webkit-backdrop-filter: blur(20px);
+          }
+          /* 侧边栏动画优化 */
+          .sidebar-text {
+              transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+              white-space: nowrap;
+              overflow: hidden;
+          }
+          .sidebar-collapsed .sidebar-text {
+              opacity: 0;
+              transform: translateX(-10px);
+              width: 0;
+          }
+          .sidebar-expanded .sidebar-text {
+              opacity: 1;
+              transform: translateX(0);
+          }
+          .sidebar-icon {
+              transition: transform 0.3s ease-in-out;
+          }
+          /* 按钮点击动画 */
+          .btn-animate {
+              transition: all 0.2s ease-in-out;
+              transform: scale(1);
+          }
+          .btn-animate:hover {
+              transform: scale(1.02);
+              box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+          }
+          .btn-animate:active {
+              transform: scale(0.95);
+              box-shadow: 0 2px 6px rgba(0, 122, 255, 0.2);
+          }
+          /* 模态框动画 */
+          .modal-overlay {
+              transition: opacity 0.3s ease-in-out;
+          }
+          .modal-content {
+              transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+          }
+          .modal-enter {
+              opacity: 0;
+          }
+          .modal-enter .modal-content {
+              transform: scale(0.9) translateY(-20px);
+              opacity: 0;
+          }
+          .modal-active {
+              opacity: 1;
+          }
+          .modal-active .modal-content {
+              transform: scale(1) translateY(0);
+              opacity: 1;
+          }
+      }
+    </style>
+  </head>
+  <body
+    class="bg-light font-sans text-dark antialiased min-h-screen flex flex-col"
+  >
+    <!-- 移动端搜索覆盖层 -->
+    <div id="mobile-search-overlay">
+      <div class="flex items-center space-x-3 mb-4">
+        <button onclick="closeMobileSearch()" class="p-2 text-gray-dark">
+          <i class="fas fa-arrow-left text-xl"></i>
+        </button>
+        <input 
+          type="text" 
+          id="mobile-search-input" 
+          placeholder="搜索物品、类别或条形码..." 
+          class="flex-1"
+          oninput="handleMobileSearch(this.value)"
+        />
+      </div>
+      <div id="mobile-search-results" class="space-y-2">
+        <div class="text-center text-gray-dark py-8">
+          <i class="fas fa-search text-3xl mb-2"></i>
+          <p>输入关键词搜索物品</p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- [MODULE] a1b_顶部导航栏 -->
+    <header
+      class="bg-white/80 backdrop-blur-apple border-b border-gray-light sticky top-0 z-50"
+    >
+      <div
+        class="container mx-auto px-4 h-16 flex items-center justify-between"
+      >
+        <!-- [MODULE] c2d_顶部导航栏:品牌标识 -->
+        <div class="flex items-center space-x-4">
+          <div
+            class="w-10 h-10 rounded-apple-sm bg-primary flex items-center justify-center text-white"
+          >
+            <i class="fas fa-boxes text-xl"> </i>
+          </div>
+          <h1 class="text-xl font-semibold tracking-tight">库存管理系统</h1>
+        </div>
+        <!-- [/MODULE] c2d_顶部导航栏:品牌标识 -- 包含系统图标和名称 -->
+        <!-- [MODULE] d3e_顶部导航栏:搜索框 -->
+        <div class="hidden md:flex relative flex-1 max-w-md mx-8">
+          <div
+            class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"
+          >
+            <i class="fas fa-search text-gray-dark"> </i>
+          </div>
+          <input
+            id="global-search-input"
+            type="text"
+            placeholder="搜索物品、类别或条形码..."
+            class="w-full pl-10 pr-4 py-2 rounded-full bg-light border border-gray-light focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-200 text-sm"
+          />
+          <!-- 搜索结果下拉框 -->
+          <div id="global-search-results" class="hidden absolute top-full left-0 right-0 mt-2 bg-white rounded-apple shadow-apple-hover border border-gray-light z-50 max-h-96 overflow-y-auto">
+            <div class="p-4 text-center text-gray-dark">
+              <i class="fas fa-search text-2xl mb-2"></i>
+              <p>输入关键词搜索物品</p>
+            </div>
+          </div>
+        </div>
+        <!-- [/MODULE] d3e_顶部导航栏:搜索框 -- 用于搜索库存中的物品 -->
+        <!-- [MODULE] e4f_顶部导航栏:用户区域 -->
+        <div class="flex items-center space-x-4">
+          <!-- 移动端搜索按钮 -->
+          <button
+            id="mobile-search-btn"
+            class="md:hidden p-2 rounded-full hover:bg-light transition-colors duration-200"
+            onclick="openMobileSearch()"
+          >
+            <i class="fas fa-search text-gray-dark"></i>
+          </button>
+          
+          <!-- 通知按钮 -->
+          <div class="relative">
+            <button
+              id="notification-btn"
+              class="relative p-2 rounded-full hover:bg-light transition-colors duration-200"
+            >
+              <i class="fas fa-bell text-gray-dark"> </i>
+              <span id="notification-badge" class="absolute top-1 right-1 w-2 h-2 bg-danger rounded-full hidden">
+              </span>
+            </button>
+            <!-- 通知下拉菜单 -->
+            <div id="notification-dropdown" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-apple shadow-apple-hover border border-gray-light z-50">
+              <div class="p-4 border-b border-gray-light flex items-center justify-between">
+                <h3 class="font-semibold">通知</h3>
+                <button id="mark-all-read" class="text-sm text-primary hover:underline">全部已读</button>
+              </div>
+              <div id="notification-list" class="max-h-96 overflow-y-auto">
+                <div class="p-4 text-center text-gray-dark">
+                  <i class="fas fa-inbox text-3xl mb-2"></i>
+                  <p>暂无通知</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 用户菜单 -->
+          <div class="relative">
+            <button
+              id="user-menu-btn"
+              class="h-8 w-8 rounded-full bg-secondary/20 flex items-center justify-center text-secondary font-medium hover:bg-secondary/30 transition-colors"
+            >
+              <span id="user-initials">JD</span>
+            </button>
+            <!-- 用户下拉菜单 -->
+            <div id="user-dropdown" class="hidden absolute right-0 mt-2 w-56 bg-white rounded-apple shadow-apple-hover border border-gray-light z-50">
+              <div class="p-4 border-b border-gray-light">
+                <p id="user-name" class="font-semibold">管理员</p>
+                <p id="user-email" class="text-sm text-gray-dark">admin@example.com</p>
+              </div>
+              <div class="py-2">
+                <a href="javascript:void(0);" data-page="settings-page" class="nav-item block px-4 py-2 text-sm hover:bg-light transition-colors">
+                  <i class="fas fa-cog mr-2"></i>系统设置
+                </a>
+              </div>
+              <div class="border-t border-gray-light py-2">
+                <button id="logout-btn" class="w-full text-left px-4 py-2 text-sm text-danger hover:bg-light transition-colors">
+                  <i class="fas fa-sign-out-alt mr-2"></i>退出登录
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- [/MODULE] e4f_顶部导航栏:用户区域 -- 包含通知图标和用户头像 -->
+      </div>
+    </header>
+    <!-- [/MODULE] a1b_顶部导航栏 -- 系统顶部导航，包含品牌标识、搜索框和用户信息 -->
+    <div class="flex flex-1 overflow-hidden">
+      <!-- [MODULE] f5g_侧边导航栏 -->
+      <aside
+        class="w-16 md:w-64 bg-white border-r border-gray-light flex flex-col transition-all duration-300 ease-in-out z-40"
+      >
+        <!-- [MODULE] g6h_侧边导航栏:导航菜单 -->
+        <nav class="flex-1 overflow-y-auto scrollbar-hide py-4">
+          <ul class="space-y-1 px-2">
+            <li>
+              <a
+                href="javascript:void(0);"
+                data-page="dashboard-page"
+                class="nav-item flex items-center space-x-3 px-3 py-3 rounded-apple-sm bg-primary/10 text-primary group"
+              >
+                <i class="fas fa-tachometer-alt text-xl w-6 text-center"> </i>
+                <span class="hidden md:inline font-medium"> 仪表盘 </span>
+              </a>
+            </li>
+            <li>
+              <a
+                href="javascript:void(0);"
+                data-page="items-page"
+                class="nav-item flex items-center space-x-3 px-3 py-3 rounded-apple-sm text-gray-dark hover:bg-light transition-colors duration-200 group"
+              >
+                <i class="fas fa-box text-xl w-6 text-center"> </i>
+                <span class="hidden md:inline"> 库存物品 </span>
+              </a>
+            </li>
+            <li>
+              <a
+                href="javascript:void(0);"
+                data-page="categories-page"
+                class="nav-item flex items-center space-x-3 px-3 py-3 rounded-apple-sm text-gray-dark hover:bg-light transition-colors duration-200 group"
+              >
+                <i class="fas fa-tags text-xl w-6 text-center"> </i>
+                <span class="hidden md:inline"> 类别管理 </span>
+              </a>
+            </li>
+            <li>
+              <a
+                href="javascript:void(0);"
+                data-page="inbound-page"
+                class="nav-item flex items-center space-x-3 px-3 py-3 rounded-apple-sm text-gray-dark hover:bg-light transition-colors duration-200 group"
+              >
+                <i class="fas fa-shopping-cart text-xl w-6 text-center"> </i>
+                <span class="hidden md:inline"> 入库管理 </span>
+              </a>
+            </li>
+            <li>
+              <a
+                href="javascript:void(0);"
+                data-page="outbound-page"
+                class="nav-item flex items-center space-x-3 px-3 py-3 rounded-apple-sm text-gray-dark hover:bg-light transition-colors duration-200 group"
+              >
+                <i class="fas fa-shipping-fast text-xl w-6 text-center"> </i>
+                <span class="hidden md:inline"> 出库管理 </span>
+              </a>
+            </li>
+            <li>
+              <a
+                href="javascript:void(0);"
+                data-page="transfer-page"
+                class="nav-item flex items-center space-x-3 px-3 py-3 rounded-apple-sm text-gray-dark hover:bg-light transition-colors duration-200 group"
+              >
+                <i class="fas fa-exchange-alt text-xl w-6 text-center"> </i>
+                <span class="hidden md:inline"> 库存调拨 </span>
+              </a>
+            </li>
+            <li>
+              <a
+                href="javascript:void(0);"
+                data-page="warehouse-page"
+                class="nav-item flex items-center space-x-3 px-3 py-3 rounded-apple-sm text-gray-dark hover:bg-light transition-colors duration-200 group"
+              >
+                <i class="fas fa-warehouse text-xl w-6 text-center"> </i>
+                <span class="hidden md:inline"> 仓库管理 </span>
+              </a>
+            </li>
+            <li>
+              <a
+                href="javascript:void(0);"
+                data-page="supplier-page"
+                class="nav-item flex items-center space-x-3 px-3 py-3 rounded-apple-sm text-gray-dark hover:bg-light transition-colors duration-200 group"
+              >
+                <i class="fas fa-users text-xl w-6 text-center"> </i>
+                <span class="hidden md:inline"> 供应商 </span>
+              </a>
+            </li>
+            <li>
+              <a
+                href="javascript:void(0);"
+                data-page="reports-page"
+                class="nav-item flex items-center space-x-3 px-3 py-3 rounded-apple-sm text-gray-dark hover:bg-light transition-colors duration-200 group"
+              >
+                <i class="fas fa-file-invoice text-xl w-6 text-center"> </i>
+                <span class="hidden md:inline"> 报表分析 </span>
+              </a>
+            </li>
+            <li>
+              <a
+                href="javascript:void(0);"
+                data-page="settings-page"
+                class="nav-item flex items-center space-x-3 px-3 py-3 rounded-apple-sm text-gray-dark hover:bg-light transition-colors duration-200 group"
+              >
+                <i class="fas fa-cog text-xl w-6 text-center"> </i>
+                <span class="hidden md:inline"> 系统设置 </span>
+              </a>
+            </li>
+          </ul>
+        </nav>
+        <!-- [/MODULE] g6h_侧边导航栏:导航菜单 -- 包含系统所有功能模块的导航链接 -->
+        <!-- [MODULE] h7i_侧边导航栏:折叠按钮 -->
+        <div class="p-4 border-t border-gray-light">
+          <button
+            id="toggle-sidebar"
+            class="flex items-center justify-center md:justify-start space-x-3 px-3 py-2 rounded-apple-sm bg-light w-full"
+          >
+            <i
+              class="fas fa-chevron-left text-gray-dark transition-transform duration-200"
+            >
+            </i>
+            <span class="hidden md:inline text-sm text-gray-dark">
+              收起菜单
+            </span>
+          </button>
+        </div>
+        <!-- [/MODULE] h7i_侧边导航栏:折叠按钮 -- 用于展开或收起侧边导航栏 -->
+      </aside>
+      <!-- [/MODULE] f5g_侧边导航栏 -- 系统侧边导航，包含所有功能模块的导航链接 -->
+      <!-- [MODULE] i8j_主内容区域 -->
+      <main class="flex-1 overflow-y-auto bg-light p-4 md:p-6 scrollbar-hide">
+        <!-- [MODULE] j9k_仪表盘页面 -->
+        <div id="dashboard-page">
+          <!-- [MODULE] k1l_仪表盘页面:页面标题 -->
+          <div
+            class="flex flex-col md:flex-row md:items-center justify-between mb-6 space-y-4 md:space-y-0"
+          >
+            <div>
+              <h2 class="text-2xl font-semibold tracking-tight">库存仪表盘</h2>
+              <p class="text-gray-dark mt-1">实时监控和管理您的库存状态</p>
+            </div>
+            <div class="flex space-x-3">
+              <button
+                id="dashboard-export-btn"
+                class="inline-flex items-center space-x-2 px-4 py-2 bg-white border border-gray-light rounded-apple-sm text-gray-dark hover:bg-gray-50 transition-colors duration-200"
+              >
+                <i class="fas fa-download"> </i>
+                <span> 导出报告 </span>
+              </button>
+              <button
+                id="scan-inbound-btn"
+                onclick="openScanInbound()"
+                class="inline-flex items-center space-x-2 px-4 py-2 bg-success text-white rounded-apple-sm hover:bg-success/90 transition-colors duration-200 shadow-sm"
+              >
+                <i class="fas fa-qrcode"> </i>
+                <span> 扫码入库 </span>
+              </button>
+              <button
+                id="add-item-btn"
+                class="inline-flex items-center space-x-2 px-4 py-2 bg-primary text-white rounded-apple-sm hover:bg-primary/90 transition-colors duration-200 shadow-sm"
+              >
+                <i class="fas fa-plus"> </i>
+                <span> 添加物品 </span>
+              </button>
+            </div>
+          </div>
+          <!-- [/MODULE] k1l_仪表盘页面:页面标题 -- 包含页面标题、描述和操作按钮 -->
+          <!-- [MODULE] l2m_仪表盘页面:统计卡片 -->
+          <div
+            class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6"
+          >
+            <!-- [MODULE] m3n_仪表盘页面:统计卡片-总物品 -->
+            <div
+              class="bg-white rounded-apple p-5 shadow-apple hover:shadow-apple-hover transition-shadow duration-300"
+            >
+              <div class="flex justify-between items-start">
+                <div>
+                  <p class="text-gray-dark text-sm">总物品数量</p>
+                  <h3 id="total-items-count" class="text-2xl font-semibold mt-1">0</h3>
+                  <p class="text-success text-sm mt-2 flex items-center">
+                    <i class="fas fa-arrow-up mr-1"> </i>
+                    <span id="total-items-change">0%</span> 较上月
+                  </p>
+                </div>
+                <div
+                  class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary"
+                >
+                  <i class="fas fa-boxes text-xl"> </i>
+                </div>
+              </div>
+              <div
+                class="mt-4 h-1 w-full bg-gray-100 rounded-full overflow-hidden"
+              >
+                <div
+                  id="total-items-progress"
+                  class="h-full bg-primary rounded-full transition-all duration-500"
+                  style="width: 0%"
+                ></div>
+              </div>
+            </div>
+            <!-- [/MODULE] m3n_仪表盘页面:统计卡片-总物品 -- 显示库存中物品的总数及同比增长 -->
+            <!-- [MODULE] n4o_仪表盘页面:统计卡片-低库存 -->
+            <div
+              class="bg-white rounded-apple p-5 shadow-apple hover:shadow-apple-hover transition-shadow duration-300"
+            >
+              <div class="flex justify-between items-start">
+                <div>
+                  <p class="text-gray-dark text-sm">低库存物品</p>
+                  <h3 id="low-stock-count" class="text-2xl font-semibold mt-1">0</h3>
+                  <p class="text-danger text-sm mt-2 flex items-center">
+                    <i class="fas fa-arrow-up mr-1"> </i>
+                    <span id="low-stock-change">0%</span> 较上月
+                  </p>
+                </div>
+                <div
+                  class="w-12 h-12 rounded-full bg-warning/10 flex items-center justify-center text-warning"
+                >
+                  <i class="fas fa-exclamation-triangle text-xl"> </i>
+                </div>
+              </div>
+              <div
+                class="mt-4 h-1 w-full bg-gray-100 rounded-full overflow-hidden"
+              >
+                <div
+                  id="low-stock-progress"
+                  class="h-full bg-warning rounded-full transition-all duration-500"
+                  style="width: 0%"
+                ></div>
+              </div>
+            </div>
+            <!-- [/MODULE] n4o_仪表盘页面:统计卡片-低库存 -- 显示库存中低库存物品的数量及同比增长 -->
+            <!-- [MODULE] o5p_仪表盘页面:统计卡片-库存价值 -->
+            <div
+              id="total-value-card"
+              class="bg-white rounded-apple p-5 shadow-apple hover:shadow-apple-hover transition-shadow duration-300"
+            >
+              <div class="flex justify-between items-start">
+                <div>
+                  <p class="text-gray-dark text-sm">库存总价值</p>
+                  <h3 id="total-value" class="text-2xl font-semibold mt-1">￥0</h3>
+                  <p class="text-success text-sm mt-2 flex items-center">
+                    <i class="fas fa-arrow-up mr-1"> </i>
+                    <span id="total-value-change">0%</span> 较上月
+                  </p>
+                </div>
+                <div
+                  class="w-12 h-12 rounded-full bg-info/10 flex items-center justify-center text-info"
+                >
+                  <i class="fas fa-yen-sign text-xl"> </i>
+                </div>
+              </div>
+              <div
+                class="mt-4 h-1 w-full bg-gray-100 rounded-full overflow-hidden"
+              >
+                <div
+                  id="total-value-progress"
+                  class="h-full bg-info rounded-full transition-all duration-500"
+                  style="width: 0%"
+                ></div>
+              </div>
+            </div>
+            <!-- [/MODULE] o5p_仪表盘页面:统计卡片-库存价值 -- 显示当前库存的总价值及同比增长 -->
+            <!-- [MODULE] p6q_仪表盘页面:统计卡片-库存周转率 -->
+            <div
+              class="bg-white rounded-apple p-5 shadow-apple hover:shadow-apple-hover transition-shadow duration-300"
+            >
+              <div class="flex justify-between items-start">
+                <div>
+                  <p class="text-gray-dark text-sm">本月周转率</p>
+                  <h3 id="turnover-rate" class="text-2xl font-semibold mt-1">0%</h3>
+                  <p class="text-danger text-sm mt-2 flex items-center">
+                    <i class="fas fa-arrow-down mr-1"> </i>
+                    <span id="turnover-rate-change">0%</span> 较上月
+                  </p>
+                </div>
+                <div
+                  class="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center text-success"
+                >
+                  <i class="fas fa-sync-alt text-xl"> </i>
+                </div>
+              </div>
+              <div
+                class="mt-4 h-1 w-full bg-gray-100 rounded-full overflow-hidden"
+              >
+                <div
+                  id="turnover-rate-progress"
+                  class="h-full bg-success rounded-full transition-all duration-500"
+                  style="width: 0%"
+                ></div>
+              </div>
+            </div>
+            <!-- [/MODULE] p6q_仪表盘页面:统计卡片-库存周转率 -- 显示本月库存周转率及同比变化 -->
+          </div>
+          <!-- [/MODULE] l2m_仪表盘页面:统计卡片 -- 显示库存关键指标的统计卡片 -->
+          <!-- [MODULE] q7r_仪表盘页面:图表区域 -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <!-- [MODULE] r8s_仪表盘页面:库存趋势图表 -->
+            <div class="lg:col-span-2 bg-white rounded-apple p-5 shadow-apple">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="font-semibold">库存趋势</h3>
+                <div class="flex space-x-2">
+                  <button
+                    data-period="month"
+                    class="trend-period-btn px-3 py-1 text-xs bg-primary/10 text-primary rounded-full"
+                  >
+                    月度
+                  </button>
+                  <button
+                    data-period="quarter"
+                    class="trend-period-btn px-3 py-1 text-xs text-gray-dark hover:bg-gray-100 rounded-full transition-colors"
+                  >
+                    季度
+                  </button>
+                  <button
+                    data-period="year"
+                    class="trend-period-btn px-3 py-1 text-xs text-gray-dark hover:bg-gray-100 rounded-full transition-colors"
+                  >
+                    年度
+                  </button>
+                </div>
+              </div>
+              <div id="inventory-trend-chart" class="w-full h-64"></div>
+            </div>
+            <!-- [/MODULE] r8s_仪表盘页面:库存趋势图表 -- 显示库存数量随时间变化的趋势图表 -->
+            <!-- [MODULE] s9t_仪表盘页面:库存类别分布 -->
+            <div class="bg-white rounded-apple p-5 shadow-apple">
+              <h3 class="font-semibold mb-4">库存类别分布</h3>
+              <div
+                id="category-distribution-chart"
+                class="w-full h-64 min-w-[250px]"
+              ></div>
+              <div id="category-legend" class="grid grid-cols-2 gap-3 mt-4">
+                <!-- 图例由JS动态生成 -->
+              </div>
+            </div>
+            <!-- [/MODULE] s9t_仪表盘页面:库存类别分布 -- 显示不同类别物品在库存中的占比 -->
+          </div>
+          <!-- [/MODULE] q7r_仪表盘页面:图表区域 -- 包含库存趋势和类别分布图表 -->
+          <!-- [MODULE] t0u_仪表盘页面:最近活动和低库存物品 -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- [MODULE] u1v_仪表盘页面:最近活动 -->
+            <div class="lg:col-span-2 bg-white rounded-apple p-5 shadow-apple">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="font-semibold">最近活动</h3>
+                <a
+                  href="javascript:void(0);"
+                  class="text-sm text-primary hover:underline"
+                >
+                  查看全部
+                </a>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="min-w-full">
+                  <thead>
+                    <tr class="border-b border-gray-light">
+                      <th
+                        class="text-left py-3 px-4 text-sm font-medium text-gray-dark"
+                      >
+                        物品
+                      </th>
+                      <th
+                        class="text-left py-3 px-4 text-sm font-medium text-gray-dark"
+                      >
+                        操作类型
+                      </th>
+                      <th
+                        class="text-left py-3 px-4 text-sm font-medium text-gray-dark"
+                      >
+                        数量
+                      </th>
+                      <th
+                        class="text-left py-3 px-4 text-sm font-medium text-gray-dark"
+                      >
+                        时间
+                      </th>
+                      <th
+                        class="text-left py-3 px-4 text-sm font-medium text-gray-dark"
+                      >
+                        操作人员
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody id="recent-activities-tbody">
+                    <tr>
+                      <td colspan="5" class="text-center py-8 text-gray-dark">
+                        <i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>加载中...
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <!-- [/MODULE] u1v_仪表盘页面:最近活动 -- 显示库存的最近操作记录 -->
+            <!-- [MODULE] v2w_仪表盘页面:低库存物品 -->
+            <div class="bg-white rounded-apple p-5 shadow-apple">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="font-semibold">低库存物品</h3>
+                <a
+                  href="javascript:void(0);"
+                  class="text-sm text-primary hover:underline"
+                >
+                  补货
+                </a>
+              </div>
+              <div id="low-stock-items" class="space-y-4">
+                <div class="text-center py-8 text-gray-dark">
+                  <i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>加载中...
+                </div>
+              </div>
+            </div>
+            <!-- [/MODULE] v2w_仪表盘页面:低库存物品 -- 显示库存中数量较低的物品列表 -->
+          </div>
+          <!-- [/MODULE] t0u_仪表盘页面:最近活动和低库存物品 -- 显示库存最近操作记录和低库存物品 -->
+        </div>
+        <!-- [/MODULE] j9k_仪表盘页面 -- 库存管理系统的仪表盘页面，显示库存概览和关键数据 -->
+        
+        <!-- 库存物品页面 -->
+        <div id="items-page" class="hidden">
+          <div class="flex items-center justify-between mb-6">
+            <div>
+              <h2 class="text-2xl font-semibold">库存物品</h2>
+              <p class="text-gray-dark mt-1">管理所有库存物品信息</p>
+            </div>
+            <button id="items-add-btn" class="bg-primary text-white px-4 py-2 rounded-xl hover:bg-blue-600 transition-colors" onclick="openAddItemModal()">
+              <i class="fas fa-plus mr-2"></i>添加物品
+            </button>
+          </div>
+          
+          <div class="bg-white rounded-apple shadow-apple p-5">
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center space-x-4">
+                <input id="items-search" type="text" placeholder="搜索物品..." class="px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary">
+                <select id="items-category-filter" class="px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary">
+                  <option value="">所有类别</option>
+                </select>
+              </div>
+              <div class="text-sm text-gray-dark">
+                共 <span id="items-total">0</span> 个物品
+              </div>
+            </div>
+            
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead class="bg-light">
+                  <tr>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">物品信息</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">类别</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">所在仓库</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">仓位</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">库存</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">单价</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">状态</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="items-table-body">
+                  <tr>
+                    <td colspan="8" class="text-center py-8 text-gray-dark">
+                      <i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>加载中...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <!-- 分页 -->
+            <div id="items-pagination"></div>
+          </div>
+        </div>
+        
+        <!-- 类别管理页面 -->
+        <div id="categories-page" class="hidden">
+          <div class="flex items-center justify-between mb-6">
+            <div>
+              <h2 class="text-2xl font-semibold">类别管理</h2>
+              <p class="text-gray-dark mt-1">管理商品分类信息</p>
+            </div>
+            <button onclick="openAddCategoryModal()" class="bg-primary text-white px-4 py-2 rounded-xl hover:bg-blue-600 transition-colors">
+              <i class="fas fa-plus mr-2"></i>添加类别
+            </button>
+          </div>
+          
+          <div class="bg-white rounded-apple shadow-apple p-5">
+            <div class="flex items-center justify-between mb-4">
+              <div class="text-sm text-gray-dark">
+                共 <span id="categories-total">0</span> 个类别
+              </div>
+            </div>
+            
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead class="bg-light">
+                  <tr>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">类别名称</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">描述</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">物品数量</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">状态</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="categories-table-body">
+                  <tr>
+                    <td colspan="5" class="text-center py-8 text-gray-dark">
+                      <i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>加载中...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 入库管理页面 -->
+        <div id="inbound-page" class="hidden">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-6 space-y-3 sm:space-y-0">
+            <div>
+              <h2 class="text-xl sm:text-2xl font-semibold">入库管理</h2>
+              <p class="text-gray-dark mt-1 text-sm sm:text-base">记录和管理物品入库操作</p>
+            </div>
+            <div class="flex space-x-2">
+              <button id="inbound-batch-delete-btn" onclick="InboundController.batchDelete()" disabled class="bg-danger text-white px-4 py-2 rounded-xl hover:bg-red-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed">
+                <i class="fas fa-trash mr-2"></i>批量删除
+              </button>
+              <button id="inbound-add-btn" class="bg-primary text-white px-4 py-2 rounded-xl hover:bg-blue-600 transition-colors w-full sm:w-auto">
+                <i class="fas fa-plus mr-2"></i>新增入库
+              </button>
+            </div>
+          </div>
+          
+          <div class="bg-white rounded-apple shadow-apple p-5">
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead class="bg-light">
+                  <tr>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">
+                      <input type="checkbox" onchange="InboundController.toggleSelectAll(this.checked)">
+                    </th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">物品</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">数量</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">供应商</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">位置</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">操作员</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">时间</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="inbound-table-body">
+                  <tr>
+                    <td colspan="8" class="text-center py-8 text-gray-dark">
+                      <i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>加载中...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 出库管理页面 -->
+        <div id="outbound-page" class="hidden">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-6 space-y-3 sm:space-y-0">
+            <div>
+              <h2 class="text-xl sm:text-2xl font-semibold">出库管理</h2>
+              <p class="text-gray-dark mt-1 text-sm sm:text-base">记录和管理物品出库操作</p>
+            </div>
+            <div class="flex space-x-2">
+              <button id="outbound-batch-delete-btn" onclick="OutboundController.batchDelete()" disabled class="bg-danger text-white px-4 py-2 rounded-xl hover:bg-red-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed">
+                <i class="fas fa-trash mr-2"></i>批量删除
+              </button>
+              <button id="outbound-add-btn" class="bg-primary text-white px-4 py-2 rounded-xl hover:bg-blue-600 transition-colors w-full sm:w-auto">
+                <i class="fas fa-plus mr-2"></i>新增出库
+              </button>
+            </div>
+          </div>
+          
+          <div class="bg-white rounded-apple shadow-apple p-5">
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead class="bg-light">
+                  <tr>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">
+                      <input type="checkbox" onchange="OutboundController.toggleSelectAll(this.checked)">
+                    </th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">物品</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">数量</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">领用人</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">部门</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">操作员</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">时间</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="outbound-table-body">
+                  <tr>
+                    <td colspan="8" class="text-center py-8 text-gray-dark">
+                      <i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>加载中...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 库存调拨页面 -->
+        <div id="transfer-page" class="hidden">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-6 space-y-3 sm:space-y-0">
+            <div>
+              <h2 class="text-xl sm:text-2xl font-semibold">库存调拨</h2>
+              <p class="text-gray-dark mt-1 text-sm sm:text-base">管理仓库间物品调拨</p>
+            </div>
+            <div class="flex space-x-2">
+              <button id="transfer-batch-delete-btn" onclick="TransferController.batchDelete()" disabled class="bg-danger text-white px-4 py-2 rounded-xl hover:bg-red-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed">
+                <i class="fas fa-trash mr-2"></i>批量删除
+              </button>
+              <button id="transfer-add-btn" class="bg-primary text-white px-4 py-2 rounded-xl hover:bg-blue-600 transition-colors w-full sm:w-auto">
+                <i class="fas fa-plus mr-2"></i>新增调拨
+              </button>
+            </div>
+          </div>
+          
+          <div class="bg-white rounded-apple shadow-apple p-5">
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead class="bg-light">
+                  <tr>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">
+                      <input type="checkbox" onchange="TransferController.toggleSelectAll(this.checked)">
+                    </th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">物品</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">数量</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">源仓库</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">目标仓库</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">操作员</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">时间</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="transfer-table-body">
+                  <tr>
+                    <td colspan="8" class="text-center py-8 text-gray-dark">
+                      <i class="fas fa-exchange-alt text-4xl mb-4"></i>
+                      <p>暂无调拨记录</p>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 仓库管理页面 -->
+        <div id="warehouse-page" class="hidden">
+          <div class="flex items-center justify-between mb-6">
+            <div>
+              <h2 class="text-2xl font-semibold">仓库管理</h2>
+              <p class="text-gray-dark mt-1">管理所有仓库信息</p>
+            </div>
+            <button id="warehouse-add-btn" class="bg-primary text-white px-4 py-2 rounded-xl hover:bg-blue-600 transition-colors">
+              <i class="fas fa-plus mr-2"></i>添加仓库
+            </button>
+          </div>
+          
+          <div id="warehouse-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div class="text-center py-12 text-gray-dark col-span-full">
+              <i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>加载中...
+            </div>
+          </div>
+        </div>
+        
+        <!-- 供应商页面 -->
+        <div id="supplier-page" class="hidden">
+          <div class="flex items-center justify-between mb-6">
+            <div>
+              <h2 class="text-2xl font-semibold">供应商管理</h2>
+              <p class="text-gray-dark mt-1">管理所有供应商信息</p>
+            </div>
+            <button id="supplier-add-btn" class="bg-primary text-white px-4 py-2 rounded-xl hover:bg-blue-600 transition-colors">
+              <i class="fas fa-plus mr-2"></i>添加供应商
+            </button>
+          </div>
+          
+          <div class="bg-white rounded-apple shadow-apple p-5">
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead class="bg-light">
+                  <tr>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">供应商名称</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">编码</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">联系人</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">电话</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">邮箱</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">状态</th>
+                    <th class="py-3 px-4 text-left text-sm font-medium text-gray-dark">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="supplier-table-body">
+                  <tr>
+                    <td colspan="7" class="text-center py-8 text-gray-dark">
+                      <i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>加载中...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 报表分析页面 -->
+        <div id="reports-page" class="hidden">
+          <div class="mb-6">
+            <h2 class="text-2xl font-semibold">报表分析</h2>
+            <p class="text-gray-dark mt-1">查看和导出各类统计报表</p>
+          </div>
+          
+          <!-- 统计卡片 -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="bg-white rounded-apple p-5 shadow-apple">
+              <div class="flex justify-between items-start">
+                <div>
+                  <p class="text-gray-dark text-sm">本月入库</p>
+                  <h3 id="report-inbound-count" class="text-2xl font-semibold mt-1">0</h3>
+                </div>
+                <div class="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center text-success">
+                  <i class="fas fa-arrow-down"></i>
+                </div>
+              </div>
+            </div>
+            <div class="bg-white rounded-apple p-5 shadow-apple">
+              <div class="flex justify-between items-start">
+                <div>
+                  <p class="text-gray-dark text-sm">本月出库</p>
+                  <h3 id="report-outbound-count" class="text-2xl font-semibold mt-1">0</h3>
+                </div>
+                <div class="w-10 h-10 rounded-full bg-danger/10 flex items-center justify-center text-danger">
+                  <i class="fas fa-arrow-up"></i>
+                </div>
+              </div>
+            </div>
+            <div class="bg-white rounded-apple p-5 shadow-apple">
+              <div class="flex justify-between items-start">
+                <div>
+                  <p class="text-gray-dark text-sm">库存总量</p>
+                  <h3 id="report-total-stock" class="text-2xl font-semibold mt-1">0</h3>
+                </div>
+                <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                  <i class="fas fa-boxes"></i>
+                </div>
+              </div>
+            </div>
+            <div class="bg-white rounded-apple p-5 shadow-apple">
+              <div class="flex justify-between items-start">
+                <div>
+                  <p class="text-gray-dark text-sm">库存价值</p>
+                  <h3 id="report-total-value" class="text-2xl font-semibold mt-1">¥0</h3>
+                </div>
+                <div class="w-10 h-10 rounded-full bg-info/10 flex items-center justify-center text-info">
+                  <i class="fas fa-yen-sign"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white rounded-apple shadow-apple p-5">
+              <h3 class="font-semibold mb-4">库存报表</h3>
+              <div class="space-y-3">
+                <button id="export-inventory-btn" class="w-full text-left px-4 py-3 bg-light rounded-xl hover:bg-gray-200 transition-colors">
+                  <i class="fas fa-file-excel text-success mr-2"></i>导出库存明细表
+                </button>
+                <button id="export-lowstock-btn" class="w-full text-left px-4 py-3 bg-light rounded-xl hover:bg-gray-200 transition-colors">
+                  <i class="fas fa-file-excel text-success mr-2"></i>导出低库存报表
+                </button>
+              </div>
+            </div>
+            
+            <div class="bg-white rounded-apple shadow-apple p-5">
+              <h3 class="font-semibold mb-4">出入库报表</h3>
+              <div class="space-y-3">
+                <button id="export-inbound-btn" class="w-full text-left px-4 py-3 bg-light rounded-xl hover:bg-gray-200 transition-colors">
+                  <i class="fas fa-file-excel text-success mr-2"></i>导出入库记录
+                </button>
+                <button id="export-outbound-btn" class="w-full text-left px-4 py-3 bg-light rounded-xl hover:bg-gray-200 transition-colors">
+                  <i class="fas fa-file-excel text-success mr-2"></i>导出出库记录
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 图表区域 -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+            <div class="bg-white rounded-apple shadow-apple p-5">
+              <h3 class="font-semibold mb-4">出入库趋势</h3>
+              <div id="report-trend-chart" class="w-full h-64"></div>
+            </div>
+            <div class="bg-white rounded-apple shadow-apple p-5">
+              <h3 class="font-semibold mb-4">库存分类占比</h3>
+              <div id="report-category-chart" class="w-full h-64"></div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 系统设置页面 -->
+        <div id="settings-page" class="hidden">
+          <div class="mb-6">
+            <h2 class="text-2xl font-semibold">系统设置</h2>
+            <p class="text-gray-dark mt-1">配置系统参数和个人信息</p>
+          </div>
+          
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- 左侧：个人信息和密码 -->
+            <div class="bg-white rounded-apple shadow-apple p-5">
+              <div class="space-y-6">
+                <div>
+                  <h3 class="font-semibold mb-3">个人信息</h3>
+                  <div class="space-y-3">
+                    <div>
+                      <label class="block text-sm text-gray-dark mb-1">用户名</label>
+                      <input type="text" id="settings-username" value="" disabled class="w-full px-4 py-2 border border-gray-300 rounded-xl bg-gray-50">
+                    </div>
+                    <div>
+                      <label class="block text-sm text-gray-dark mb-1">邮箱</label>
+                      <input type="email" id="settings-email" value="" class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary">
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
+                  <h3 class="font-semibold mb-3">修改密码</h3>
+                  <form id="change-password-form" class="space-y-3">
+                    <div>
+                      <label class="block text-sm text-gray-dark mb-1">当前密码</label>
+                      <input type="password" id="old-password" name="old_password" required class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary">
+                    </div>
+                    <div>
+                      <label class="block text-sm text-gray-dark mb-1">新密码</label>
+                      <input type="password" id="new-password" name="new_password" required minlength="6" class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary">
+                    </div>
+                    <div>
+                      <label class="block text-sm text-gray-dark mb-1">确认新密码</label>
+                      <input type="password" id="new-password-confirm" name="new_password_confirm" required minlength="6" class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary">
+                    </div>
+                    <button type="submit" id="change-password-btn" class="bg-primary text-white px-6 py-2 rounded-xl hover:bg-blue-600 transition-colors">
+                      保存修改
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 右侧：登录黑名单管理 -->
+            <div class="bg-white rounded-apple shadow-apple p-5">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="font-semibold flex items-center">
+                  <i class="fas fa-ban text-danger mr-2"></i>
+                  登录黑名单
+                </h3>
+                <button onclick="refreshBlacklist()" class="text-primary hover:text-primary/80 transition-colors">
+                  <i class="fas fa-sync-alt"></i>
+                </button>
+              </div>
+              <p class="text-sm text-gray-dark mb-4">因多次登录失败被锁定的账户/IP</p>
+              
+              <!-- 黑名单列表 -->
+              <div id="blacklist-container" class="space-y-3 max-h-80 overflow-y-auto">
+                <div class="text-center py-8 text-gray-dark">
+                  <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                  <p>加载中...</p>
+                </div>
+              </div>
+              
+              <!-- 手动添加黑名单 -->
+              <div class="mt-4 pt-4 border-t border-gray-light">
+                <h4 class="text-sm font-medium mb-2">手动添加黑名单</h4>
+                <div class="flex space-x-2">
+                  <input type="text" id="blacklist-input" placeholder="用户名或IP地址" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                  <button onclick="addToBlacklist()" class="px-4 py-2 bg-danger text-white rounded-lg text-sm hover:bg-danger/90 transition-colors">
+                    <i class="fas fa-plus mr-1"></i>添加
+                  </button>
+                </div>
+              </div>
+              
+              <!-- 清空所有黑名单 -->
+              <div class="mt-4">
+                <button onclick="clearAllBlacklist()" class="w-full px-4 py-2 border border-danger text-danger rounded-lg text-sm hover:bg-danger/10 transition-colors">
+                  <i class="fas fa-trash mr-1"></i>清空所有黑名单
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 系统信息 -->
+          <div class="mt-6 bg-white rounded-apple shadow-apple p-5">
+            <h3 class="font-semibold mb-4 flex items-center">
+              <i class="fas fa-info-circle text-primary mr-2"></i>
+              系统信息
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div class="p-4 bg-light rounded-xl">
+                <p class="text-sm text-gray-dark mb-1">系统名称</p>
+                <p class="font-medium" id="sys-name">-</p>
+              </div>
+              <div class="p-4 bg-light rounded-xl">
+                <p class="text-sm text-gray-dark mb-1">系统版本</p>
+                <p class="font-medium" id="sys-version">-</p>
+              </div>
+              <div class="p-4 bg-light rounded-xl">
+                <p class="text-sm text-gray-dark mb-1">后端框架</p>
+                <p class="font-medium" id="sys-backend">-</p>
+              </div>
+              <div class="p-4 bg-light rounded-xl">
+                <p class="text-sm text-gray-dark mb-1">数据库</p>
+                <p class="font-medium" id="sys-database">-</p>
+              </div>
+              <div class="p-4 bg-light rounded-xl">
+                <p class="text-sm text-gray-dark mb-1">物品总数</p>
+                <p class="font-medium" id="sys-items-count">-</p>
+              </div>
+              <div class="p-4 bg-light rounded-xl">
+                <p class="text-sm text-gray-dark mb-1">仓库数量</p>
+                <p class="font-medium" id="sys-warehouses-count">-</p>
+              </div>
+              <div class="p-4 bg-light rounded-xl">
+                <p class="text-sm text-gray-dark mb-1">供应商数量</p>
+                <p class="font-medium" id="sys-suppliers-count">-</p>
+              </div>
+              <div class="p-4 bg-light rounded-xl">
+                <p class="text-sm text-gray-dark mb-1">操作记录</p>
+                <p class="font-medium" id="sys-operations-count">-</p>
+              </div>
+            </div>
+            <div class="mt-4 pt-4 border-t border-gray-light">
+              <div class="flex items-center justify-between text-sm text-gray-dark">
+                <span id="sys-copyright">-</span>
+                <span id="sys-server-time">-</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+      </main>
+      <!-- [/MODULE] i8j_主内容区域 -- 系统主内容显示区域，包含当前选中功能模块的内容 -->
+    </div>
+    <!-- [MODULE] 摄像头扫描全屏页面 -->
+    <div
+      id="camera-scan-modal"
+      class="fixed inset-0 bg-light flex flex-col z-50 hidden"
+    >
+      <!-- 顶部导航栏 - Apple风格 -->
+      <div id="scan-top-nav" class="bg-white/80 backdrop-blur-apple border-b border-gray-light">
+        <div class="flex items-center justify-between px-4 h-14">
+          <!-- 移动端隐藏返回按钮，桌面端显示 -->
+          <button onclick="closeCameraScan()" class="hidden md:flex items-center text-primary hover:text-primary/80 transition-colors font-medium">
+            <i class="fas fa-chevron-left mr-1"></i>
+            <span>返回</span>
+          </button>
+          <!-- 移动端占位 -->
+          <div class="w-14 md:hidden"></div>
+          <h3 class="text-base font-semibold text-dark">扫码入库</h3>
+          <div class="w-14"></div>
+        </div>
+      </div>
+      
+      <!-- 扫描区域 -->
+      <div class="flex-1 flex flex-col items-center justify-center p-4 bg-light">
+        <!-- 摄像头预览 -->
+        <div class="w-full max-w-sm aspect-square rounded-2xl overflow-hidden bg-gray-100 shadow-apple relative">
+          <div id="camera-preview" class="w-full h-full"></div>
+        </div>
+        
+        <!-- 状态提示 -->
+        <div class="mt-6 text-center">
+          <p id="camera-scan-status" class="text-dark text-base font-medium">正在启动摄像头...</p>
+          <p class="text-gray-dark text-sm mt-2">将二维码放入取景框内自动识别</p>
+        </div>
+      </div>
+      
+      <!-- 底部提示区域 -->
+      <div class="bg-white/80 backdrop-blur-apple border-t border-gray-light p-4 pb-8">
+        <div class="flex items-center justify-center space-x-2 text-gray-dark">
+          <i class="fas fa-lightbulb text-warning"></i>
+          <span class="text-sm">保持15-30cm距离，确保光线充足</span>
+        </div>
+      </div>
+    </div>
+    <!-- [/MODULE] 摄像头扫描全屏页面 -->
+
+    <!-- [MODULE] 物品二维码模态框 -->
+    <div
+      id="item-qrcode-modal"
+      class="fixed inset-0 bg-black/50 backdrop-blur-apple flex items-center justify-center z-50 hidden"
+    >
+      <div class="bg-white rounded-apple shadow-apple-hover w-full max-w-sm mx-4 overflow-hidden">
+        <div class="flex items-center justify-between p-4 border-b border-gray-light">
+          <h3 class="text-lg font-semibold flex items-center">
+            <i class="fas fa-qrcode text-primary mr-2"></i>
+            物品二维码
+          </h3>
+          <button onclick="closeItemQRCode()" class="text-gray-dark hover:text-dark transition-colors">
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
+        <div class="p-6 text-center">
+          <!-- 物品名称 -->
+          <h4 id="qrcode-item-name" class="font-semibold text-lg mb-2"></h4>
+          
+          <!-- 二维码显示区域 -->
+          <div id="item-qrcode-display" class="inline-block p-4 bg-white border border-gray-light rounded-apple mb-4"></div>
+          
+          <!-- 物品编码 -->
+          <p id="qrcode-item-code" class="text-gray-dark font-mono text-sm mb-4"></p>
+          
+          <!-- 操作按钮 -->
+          <div class="flex space-x-3">
+            <button onclick="printItemLabel()" class="flex-1 px-4 py-2 bg-primary text-white rounded-apple hover:bg-primary/90 transition-colors">
+              <i class="fas fa-print mr-2"></i>打印标签
+            </button>
+            <button onclick="downloadItemQRCode()" class="flex-1 px-4 py-2 border border-gray-light rounded-apple text-gray-dark hover:bg-gray-50 transition-colors">
+              <i class="fas fa-download mr-2"></i>下载
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- [/MODULE] 物品二维码模态框 -->
+
+    <!-- [MODULE] 快速入库模态框 -->
+    <div
+      id="quick-inbound-modal"
+      class="fixed inset-0 bg-black/50 backdrop-blur-apple flex items-center justify-center z-50 hidden"
+    >
+      <div class="bg-white rounded-apple shadow-apple-hover w-full max-w-md mx-4 overflow-hidden">
+        <div class="flex items-center justify-between p-4 border-b border-gray-light">
+          <h3 class="text-lg font-semibold flex items-center">
+            <i class="fas fa-box text-primary mr-2"></i>
+            快速入库
+          </h3>
+          <button onclick="closeQuickInbound()" class="text-gray-dark hover:text-dark transition-colors">
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
+        <div class="p-4">
+          <!-- 物品信息 -->
+          <div class="flex items-start space-x-4 mb-4">
+            <div id="quick-inbound-image-container" class="flex-shrink-0">
+              <!-- 图片将由JS动态填充 -->
+            </div>
+            <div class="flex-1">
+              <h4 id="quick-inbound-item-name" class="font-semibold text-lg"></h4>
+              <p class="text-gray-dark text-sm">编码: <span id="quick-inbound-item-code"></span></p>
+              <p class="text-gray-dark text-sm">当前库存: <span id="quick-inbound-item-stock"></span></p>
+            </div>
+          </div>
+          
+          <!-- 错误提示 -->
+          <div id="quick-inbound-error" class="hidden bg-danger/10 text-danger text-sm p-3 rounded-apple mb-4"></div>
+          
+          <!-- 入库数量 -->
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-dark mb-1">入库数量 <span class="text-danger">*</span></label>
+            <input type="number" id="quick-inbound-quantity" min="1" placeholder="请输入入库数量"
+              class="w-full px-4 py-2 border border-gray-light rounded-apple focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary">
+          </div>
+          
+          <!-- 仓库选择 -->
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-dark mb-1">入库仓库 <span class="text-danger">*</span></label>
+            <select id="quick-inbound-warehouse"
+              class="w-full px-4 py-2 border border-gray-light rounded-apple focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary">
+              <option value="">请选择仓库</option>
+            </select>
+            <p id="quick-inbound-warehouse-hint" class="text-xs text-gray-dark mt-1"></p>
+          </div>
+          
+          <!-- 供应商选择 -->
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-dark mb-1">供应商 <span class="text-danger">*</span></label>
+            <select id="quick-inbound-supplier"
+              class="w-full px-4 py-2 border border-gray-light rounded-apple focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary">
+              <option value="">请选择供应商</option>
+            </select>
+          </div>
+          
+          <!-- 备注 -->
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-dark mb-1">备注（可选）</label>
+            <input type="text" id="quick-inbound-notes" placeholder="入库备注"
+              class="w-full px-4 py-2 border border-gray-light rounded-apple focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary">
+          </div>
+          
+          <!-- 操作按钮 -->
+          <div class="flex space-x-3">
+            <button onclick="closeQuickInbound()" class="flex-1 px-4 py-2 border border-gray-light rounded-apple text-gray-dark hover:bg-gray-50 transition-colors">
+              取消
+            </button>
+            <button id="quick-inbound-submit-btn" onclick="submitQuickInbound()" class="flex-1 px-4 py-2 bg-primary text-white rounded-apple hover:bg-primary/90 transition-colors">
+              确认入库
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- [/MODULE] 快速入库模态框 -->
+
+    <!-- [MODULE] w3x_添加物品模态框 -->
+    <div
+      id="add-item-modal"
+      class="fixed inset-0 bg-black/50 backdrop-blur-apple flex items-center justify-center z-50 hidden"
+    >
+      <div
+        class="bg-white rounded-apple w-full max-w-2xl max-h-[90vh] overflow-y-auto transform transition-all duration-300 scale-95 opacity-0"
+        id="modal-content"
+      >
+        <div
+          class="p-5 border-b border-gray-light flex items-center justify-between"
+        >
+          <h3 class="text-xl font-semibold">添加新物品</h3>
+          <button
+            id="close-modal"
+            class="p-2 rounded-full hover:bg-light transition-colors"
+          >
+            <i class="fas fa-times text-gray-dark"> </i>
+          </button>
+        </div>
+        <div class="p-5">
+          <form id="add-item-form" class="space-y-5">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div>
+                <label class="block text-sm font-medium text-gray-dark mb-1">
+                  物品名称
+                  <span class="text-danger"> * </span>
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  id="item-name"
+                  class="w-full px-4 py-2 border border-gray-light rounded-apple-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                  placeholder="输入物品名称"
+                  required
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-dark mb-1">
+                  物品编码
+                  <span class="text-gray-dark text-xs ml-2">(留空自动生成)</span>
+                </label>
+                <input
+                  type="text"
+                  name="code"
+                  id="item-code"
+                  class="w-full px-4 py-2 border border-gray-light rounded-apple-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                  placeholder="留空自动生成唯一编码"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-dark mb-1">
+                  物品类别
+                  <span class="text-danger"> * </span>
+                </label>
+                <select
+                  name="category"
+                  id="item-category"
+                  class="w-full px-4 py-2 border border-gray-light rounded-apple-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none bg-white"
+                  required
+                >
+                  <option value="">选择类别</option>
+                  <!-- 类别选项由JavaScript动态加载 -->
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-dark mb-1">
+                  供应商
+                </label>
+                <select
+                  name="supplier"
+                  id="item-supplier"
+                  class="w-full px-4 py-2 border border-gray-light rounded-apple-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none bg-white"
+                >
+                  <option value="">选择供应商（可选）</option>
+                  <!-- 供应商选项由JavaScript动态加载 -->
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-dark mb-1">
+                  单价 (¥)
+                  <span class="text-danger"> * </span>
+                </label>
+                <input
+                  type="number"
+                  name="price"
+                  id="item-price"
+                  step="0.01"
+                  min="0"
+                  class="w-full px-4 py-2 border border-gray-light rounded-apple-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                  placeholder="输入单价"
+                  required
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-dark mb-1">
+                  库存数量
+                  <span class="text-danger"> * </span>
+                </label>
+                <input
+                  type="number"
+                  name="stock"
+                  id="item-stock"
+                  min="0"
+                  class="w-full px-4 py-2 border border-gray-light rounded-apple-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                  placeholder="输入库存数量"
+                  required
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-dark mb-1">
+                  最低库存预警
+                </label>
+                <input
+                  type="number"
+                  name="min_stock"
+                  id="item-min-stock"
+                  min="0"
+                  class="w-full px-4 py-2 border border-gray-light rounded-apple-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                  placeholder="输入最低库存预警值"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-dark mb-1">
+                  仓库
+                  <span class="text-danger"> * </span>
+                </label>
+                <select
+                  name="warehouse"
+                  id="item-warehouse"
+                  class="w-full px-4 py-2 border border-gray-light rounded-apple-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none bg-white"
+                  required
+                >
+                  <option value="">选择仓库</option>
+                  <!-- 仓库选项由JavaScript动态加载 -->
+                </select>
+                <!-- 仓库容量提示 -->
+                <p id="item-warehouse-capacity-hint" class="text-xs text-gray-dark mt-1 hidden"></p>
+                <p id="item-stock-error" class="text-xs text-danger mt-1 hidden"></p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-dark mb-1">
+                  仓位
+                </label>
+                <input
+                  type="text"
+                  name="warehouse_location"
+                  id="item-warehouse-location"
+                  class="w-full px-4 py-2 border border-gray-light rounded-apple-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                  placeholder="输入仓位（如：A-01-05）"
+                />
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-dark mb-1">
+                物品描述
+              </label>
+              <textarea
+                name="description"
+                id="item-description"
+                rows="3"
+                class="w-full px-4 py-2 border border-gray-light rounded-apple-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                placeholder="输入物品描述信息"
+              >
+              </textarea>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-dark mb-1">
+                物品图片
+              </label>
+              <input type="file" id="item-image-input" name="image" accept="image/jpeg,image/png,image/jpg" class="hidden" />
+              <div
+                id="upload-area"
+                class="border-2 border-dashed border-gray-light rounded-apple-sm p-6 text-center hover:border-primary/50 transition-colors cursor-pointer"
+              >
+                <i class="fas fa-cloud-upload-alt text-2xl text-gray-dark mb-2">
+                </i>
+                <p class="text-sm text-gray-dark">
+                  点击上传图片或拖放文件到此处
+                </p>
+                <p class="text-xs text-gray-dark/70 mt-1">
+                  支持 JPG, PNG 格式，最大 5MB
+                </p>
+              </div>
+              <!-- 图片预览区域 -->
+              <div id="image-preview" class="hidden mt-3">
+                <div class="relative inline-block">
+                  <img id="preview-img" src="" alt="预览" class="w-32 h-32 object-cover rounded-apple-sm border border-gray-light" />
+                  <button type="button" id="remove-image" class="absolute -top-2 -right-2 w-6 h-6 bg-danger text-white rounded-full hover:bg-danger/90 transition-colors">
+                    <i class="fas fa-times text-xs"></i>
+                  </button>
+                </div>
+                <p id="image-name" class="text-xs text-gray-dark mt-2"></p>
+              </div>
+            </div>
+            <!-- 表单按钮 -->
+            <div class="flex justify-end space-x-3 pt-3">
+              <button
+                type="button"
+                id="cancel-add-item"
+                class="px-4 py-2 border border-gray-light rounded-apple-sm text-gray-dark hover:bg-gray-50 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                id="submit-item-btn"
+                class="px-4 py-2 bg-primary text-white rounded-apple-sm hover:bg-primary/90 transition-colors shadow-sm"
+              >
+                保存物品
+              </button>
+            </div>
+          </form>
+        </div>
+        <div class="p-5 border-t border-gray-light hidden">
+          <!-- 占位，保持布局 -->
+        </div>
+      </div>
+    </div>
+    <!-- [/MODULE] w3x_添加物品模态框 -- 用于添加新物品到库存的模态窗口 -->
+    
+    <!-- 类别管理模态框 -->
+    <div id="add-category-modal" class="fixed inset-0 bg-black/50 backdrop-blur-apple flex items-center justify-center z-50 hidden">
+      <div class="bg-white rounded-apple w-full max-w-md mx-4">
+        <div class="p-5 border-b border-gray-light flex items-center justify-between">
+          <h3 id="category-modal-title" class="text-xl font-semibold">添加类别</h3>
+          <button onclick="closeAddCategoryModal()" class="p-2 rounded-full hover:bg-light transition-colors">
+            <i class="fas fa-times text-gray-dark"></i>
+          </button>
+        </div>
+        <form id="category-form" onsubmit="submitCategory(event)" class="p-5 space-y-4">
+          <input type="hidden" id="category-id" value="">
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">
+              类别名称 <span class="text-danger">*</span>
+            </label>
+            <input type="text" id="category-name" required
+              class="w-full px-4 py-2 border border-gray-light rounded-apple-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+              placeholder="输入类别名称">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">
+              类别编码 <span class="text-gray-dark text-xs ml-2">(留空自动生成)</span>
+            </label>
+            <input type="text" id="category-code"
+              class="w-full px-4 py-2 border border-gray-light rounded-apple-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+              placeholder="如: ELEC, OFFICE">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">描述</label>
+            <textarea id="category-description" rows="3"
+              class="w-full px-4 py-2 border border-gray-light rounded-apple-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+              placeholder="类别描述（可选）"></textarea>
+          </div>
+          <div class="flex items-center">
+            <input type="checkbox" id="category-active" checked
+              class="w-4 h-4 text-primary border-gray-light rounded focus:ring-primary">
+            <label for="category-active" class="ml-2 text-sm text-gray-dark">启用此类别</label>
+          </div>
+          <div class="flex space-x-3 pt-4">
+            <button type="button" onclick="closeAddCategoryModal()"
+              class="flex-1 px-4 py-2 border border-gray-light rounded-apple-sm hover:bg-light transition-colors">
+              取消
+            </button>
+            <button type="submit"
+              class="flex-1 px-4 py-2 bg-primary text-white rounded-apple-sm hover:bg-primary/90 transition-colors">
+              保存
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+    
+    <!-- 入库模态框 -->
+    <div id="inbound-modal" class="fixed inset-0 bg-black/50 backdrop-blur-apple flex items-center justify-center z-50 hidden">
+      <div class="modal-content bg-white rounded-apple w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div class="p-5 border-b border-gray-light flex items-center justify-between">
+          <h3 class="text-xl font-semibold">新增入库</h3>
+          <button class="close-modal p-2 rounded-full hover:bg-light transition-colors">
+            <i class="fas fa-times text-gray-dark"></i>
+          </button>
+        </div>
+        <form id="inbound-form" class="p-5 space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">选择物品 <span class="text-danger">*</span></label>
+            <select name="item" id="inbound-item" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm" required>
+              <option value="">请选择物品</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">入库仓库 <span class="text-danger">*</span></label>
+            <select
+              name="warehouse"
+              id="inbound-warehouse"
+              class="w-full px-4 py-2 border border-gray-light rounded-apple-sm bg-gray-50 cursor-not-allowed"
+              aria-disabled="true"
+              tabindex="-1"
+              disabled
+              required
+            >
+              <option value="">请选择仓库</option>
+            </select>
+            <input type="hidden" name="warehouse" id="inbound-warehouse-hidden" />
+            <p id="inbound-warehouse-hint" class="text-xs text-gray-dark mt-1 hidden">
+              <i class="fas fa-info-circle mr-1"></i>
+              <span id="inbound-warehouse-hint-text"></span>
+            </p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">入库数量 <span class="text-danger">*</span></label>
+            <input type="number" name="quantity" id="inbound-quantity" min="1" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm" required>
+            <p id="inbound-capacity-hint" class="text-xs text-gray-dark mt-1 hidden">
+              <i class="fas fa-warehouse mr-1"></i>
+              <span id="inbound-capacity-hint-text"></span>
+            </p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">供应商 <span class="text-danger">*</span></label>
+            <select name="supplier" id="inbound-supplier" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm" required>
+              <option value="">请选择供应商</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">备注</label>
+            <textarea name="notes" id="inbound-notes" rows="2" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm"></textarea>
+          </div>
+          <div class="flex justify-end space-x-3 pt-3">
+            <button type="button" class="close-modal px-4 py-2 border border-gray-light rounded-apple-sm">取消</button>
+            <button type="submit" class="px-4 py-2 bg-primary text-white rounded-apple-sm">确认入库</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    
+    <!-- 出库模态框 -->
+    <div id="outbound-modal" class="fixed inset-0 bg-black/50 backdrop-blur-apple flex items-center justify-center z-50 hidden">
+      <div class="modal-content bg-white rounded-apple w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div class="p-5 border-b border-gray-light flex items-center justify-between">
+          <h3 class="text-xl font-semibold">新增出库</h3>
+          <button class="close-modal p-2 rounded-full hover:bg-light transition-colors">
+            <i class="fas fa-times text-gray-dark"></i>
+          </button>
+        </div>
+        <form id="outbound-form" class="p-5 space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">选择物品 <span class="text-danger">*</span></label>
+            <select name="item" id="outbound-item" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm" required>
+              <option value="">请选择物品</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">出库数量 <span class="text-danger">*</span></label>
+            <input type="number" name="quantity" id="outbound-quantity" min="1" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm" required>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">领用人</label>
+            <input type="text" name="recipient" id="outbound-recipient" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">部门</label>
+            <input type="text" name="department" id="outbound-department" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">备注</label>
+            <textarea name="notes" id="outbound-notes" rows="2" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm"></textarea>
+          </div>
+          <div class="flex justify-end space-x-3 pt-3">
+            <button type="button" class="close-modal px-4 py-2 border border-gray-light rounded-apple-sm">取消</button>
+            <button type="submit" class="px-4 py-2 bg-primary text-white rounded-apple-sm">确认出库</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    
+    <!-- 调拨模态框 -->
+    <div id="transfer-modal" class="fixed inset-0 bg-black/50 backdrop-blur-apple flex items-center justify-center z-50 hidden">
+      <div class="modal-content bg-white rounded-apple w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div class="p-5 border-b border-gray-light flex items-center justify-between">
+          <h3 class="text-xl font-semibold">新增调拨</h3>
+          <button class="close-modal p-2 rounded-full hover:bg-light transition-colors">
+            <i class="fas fa-times text-gray-dark"></i>
+          </button>
+        </div>
+        <form id="transfer-form" class="p-5 space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">选择物品 <span class="text-danger">*</span></label>
+            <select name="item" id="transfer-item" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm" required>
+              <option value="">请选择物品</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">调拨数量 <span class="text-danger">*</span></label>
+            <input type="number" name="quantity" id="transfer-quantity" min="1" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm" required>
+          </div>
+          <!-- 源仓库隐藏字段，自动使用物品所在仓库 -->
+          <input type="hidden" name="from_warehouse" id="transfer-from" value="">
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">目标仓库 <span class="text-danger">*</span></label>
+            <select name="to_warehouse" id="transfer-to" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm" required>
+              <option value="">请选择目标仓库</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">备注</label>
+            <textarea name="notes" id="transfer-notes" rows="2" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm"></textarea>
+          </div>
+          <div class="flex justify-end space-x-3 pt-3">
+            <button type="button" class="close-modal px-4 py-2 border border-gray-light rounded-apple-sm">取消</button>
+            <button type="submit" class="px-4 py-2 bg-primary text-white rounded-apple-sm">确认调拨</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    
+    <!-- 仓库模态框 -->
+    <div id="warehouse-modal" class="fixed inset-0 bg-black/50 backdrop-blur-apple flex items-center justify-center z-50 hidden">
+      <div class="bg-white rounded-apple w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div class="p-5 border-b border-gray-light flex items-center justify-between">
+          <h3 class="text-xl font-semibold">添加仓库</h3>
+          <button class="close-modal p-2 rounded-full hover:bg-light transition-colors">
+            <i class="fas fa-times text-gray-dark"></i>
+          </button>
+        </div>
+        <form id="warehouse-form" class="p-5 space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">仓库名称 <span class="text-danger">*</span></label>
+            <input type="text" name="name" id="warehouse-name" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm" required>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">仓库编码</label>
+            <input type="text" name="code" id="warehouse-code" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm" placeholder="留空自动生成">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">地址</label>
+            <input type="text" name="address" id="warehouse-address" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">负责人</label>
+            <input type="text" name="manager" id="warehouse-manager" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">联系电话</label>
+            <input type="text" name="phone" id="warehouse-phone" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">容量</label>
+            <input type="number" name="capacity" id="warehouse-capacity" min="0" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm">
+          </div>
+          <div id="warehouse-status-row" class="hidden">
+            <label class="block text-sm font-medium text-gray-dark mb-2">仓库状态</label>
+            <div class="flex items-center justify-between p-3 bg-light rounded-apple-sm">
+              <div class="flex items-center space-x-3">
+                <i id="warehouse-status-icon" class="fas fa-warehouse text-success text-xl"></i>
+                <div>
+                  <p id="warehouse-status-text" class="font-medium text-sm">运营中</p>
+                  <p class="text-xs text-gray-dark">切换仓库的启用状态</p>
+                </div>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" name="is_active" id="warehouse-is-active" class="sr-only peer" checked>
+                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-success"></div>
+              </label>
+            </div>
+            <p id="warehouse-status-warning" class="text-xs text-warning mt-2 hidden">
+              <i class="fas fa-exclamation-triangle mr-1"></i>
+              停用仓库后，该仓库将不会出现在入库和调拨的选择列表中
+            </p>
+          </div>
+          <div class="flex justify-end space-x-3 pt-3">
+            <button type="button" class="close-modal px-4 py-2 border border-gray-light rounded-apple-sm">取消</button>
+            <button type="submit" class="px-4 py-2 bg-primary text-white rounded-apple-sm">保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    
+    <!-- 供应商模态框 -->
+    <div id="supplier-modal" class="fixed inset-0 bg-black/50 backdrop-blur-apple flex items-center justify-center z-50 hidden">
+      <div class="bg-white rounded-apple w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div class="p-5 border-b border-gray-light flex items-center justify-between">
+          <h3 class="text-xl font-semibold">添加供应商</h3>
+          <button class="close-modal p-2 rounded-full hover:bg-light transition-colors">
+            <i class="fas fa-times text-gray-dark"></i>
+          </button>
+        </div>
+        <form id="supplier-form" class="p-5 space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">供应商名称 <span class="text-danger">*</span></label>
+            <input type="text" name="name" id="supplier-name" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm" required>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">供应商编码</label>
+            <input type="text" name="code" id="supplier-code" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm" placeholder="留空自动生成">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">联系人</label>
+            <input type="text" name="contact" id="supplier-contact" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">联系电话</label>
+            <input type="text" name="phone" id="supplier-phone" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">邮箱</label>
+            <input type="email" name="email" id="supplier-email" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">地址</label>
+            <input type="text" name="address" id="supplier-address" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm">
+          </div>
+          <div class="flex justify-end space-x-3 pt-3">
+            <button type="button" class="close-modal px-4 py-2 border border-gray-light rounded-apple-sm">取消</button>
+            <button type="submit" class="px-4 py-2 bg-primary text-white rounded-apple-sm">保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    
+    <!-- 编辑物品模态框 -->
+    <div id="edit-item-modal" class="fixed inset-0 bg-black/50 backdrop-blur-apple flex items-center justify-center z-50 hidden">
+      <div class="bg-white rounded-apple w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div class="p-5 border-b border-gray-light flex items-center justify-between">
+          <h3 class="text-xl font-semibold">编辑物品</h3>
+          <button class="close-modal p-2 rounded-full hover:bg-light transition-colors">
+            <i class="fas fa-times text-gray-dark"></i>
+          </button>
+        </div>
+        <form id="edit-item-form" class="p-5 space-y-4">
+          <input type="hidden" name="id" id="edit-item-id">
+          
+          <!-- 图片上传区域 -->
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-dark mb-2">物品图片</label>
+            <div class="flex items-start space-x-4">
+              <div class="w-24 h-24 rounded-lg border-2 border-dashed border-gray-light flex items-center justify-center overflow-hidden bg-gray-50">
+                <img id="edit-item-image-preview" src="" alt="预览" class="w-full h-full object-cover hidden">
+                <i id="edit-item-image-placeholder" class="fas fa-image text-3xl text-gray-300"></i>
+              </div>
+              <div class="flex-1">
+                <input type="file" id="edit-item-image-input" name="image" accept="image/*" class="hidden">
+                <input type="hidden" id="edit-item-image-url" name="image_url">
+                <button type="button" onclick="document.getElementById('edit-item-image-input').click()" class="px-4 py-2 bg-light text-gray-dark rounded-apple-sm hover:bg-gray-200 transition-colors">
+                  <i class="fas fa-upload mr-2"></i>选择图片
+                </button>
+                <button type="button" id="edit-item-image-remove" onclick="removeEditItemImage()" class="ml-2 px-4 py-2 text-danger hover:bg-danger/10 rounded-apple-sm transition-colors hidden">
+                  <i class="fas fa-trash mr-1"></i>删除
+                </button>
+                <p class="text-xs text-gray-dark mt-2">支持 JPG、PNG 格式，最大 5MB</p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-dark mb-1">物品名称 <span class="text-danger">*</span></label>
+              <input type="text" name="name" id="edit-item-name" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm" required>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-dark mb-1">物品编码</label>
+              <input type="text" name="code" id="edit-item-code" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm" readonly>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-dark mb-1">类别 <span class="text-danger">*</span></label>
+              <select name="category" id="edit-item-category" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm" required>
+                <option value="">选择类别</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-dark mb-1">单价 <span class="text-danger">*</span></label>
+              <input type="number" name="price" id="edit-item-price" step="0.01" min="0" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm" required>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-dark mb-1">库存数量</label>
+              <input type="number" name="stock" id="edit-item-stock" min="0" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-dark mb-1">最低库存</label>
+              <input type="number" name="min_stock" id="edit-item-min-stock" min="0" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-dark mb-1">仓库</label>
+              <select name="warehouse" id="edit-item-warehouse" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm">
+                <option value="">选择仓库</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-dark mb-1">仓位</label>
+              <input type="text" name="warehouse_location" id="edit-item-location" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm">
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-dark mb-1">描述</label>
+            <textarea name="description" id="edit-item-description" rows="2" class="w-full px-4 py-2 border border-gray-light rounded-apple-sm"></textarea>
+          </div>
+          <div class="flex justify-end space-x-3 pt-3">
+            <button type="button" class="close-modal px-4 py-2 border border-gray-light rounded-apple-sm">取消</button>
+            <button type="submit" class="px-4 py-2 bg-primary text-white rounded-apple-sm">保存修改</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    
+    <script>
+      // 编辑物品图片预览
+      document.getElementById('edit-item-image-input')?.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            const preview = document.getElementById('edit-item-image-preview');
+            const placeholder = document.getElementById('edit-item-image-placeholder');
+            const removeBtn = document.getElementById('edit-item-image-remove');
+            preview.src = e.target.result;
+            preview.classList.remove('hidden');
+            placeholder.classList.add('hidden');
+            removeBtn.classList.remove('hidden');
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+      
+      function removeEditItemImage() {
+        const preview = document.getElementById('edit-item-image-preview');
+        const placeholder = document.getElementById('edit-item-image-placeholder');
+        const removeBtn = document.getElementById('edit-item-image-remove');
+        const input = document.getElementById('edit-item-image-input');
+        const urlInput = document.getElementById('edit-item-image-url');
+        
+        preview.src = '';
+        preview.classList.add('hidden');
+        placeholder.classList.remove('hidden');
+        removeBtn.classList.add('hidden');
+        input.value = '';
+        urlInput.value = '';
+      }
+      
+      function setEditItemImage(imageUrl) {
+        const preview = document.getElementById('edit-item-image-preview');
+        const placeholder = document.getElementById('edit-item-image-placeholder');
+        const removeBtn = document.getElementById('edit-item-image-remove');
+        const urlInput = document.getElementById('edit-item-image-url');
+        
+        if (imageUrl) {
+          // 处理图片URL，确保在内网穿透时也能正常工作
+          let processedUrl = imageUrl;
+          if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+            try {
+              const url = new URL(imageUrl);
+              processedUrl = url.pathname;
+            } catch (e) {}
+          } else if (!imageUrl.startsWith('/')) {
+            processedUrl = '/' + imageUrl;
+          }
+          
+          preview.src = processedUrl;
+          preview.classList.remove('hidden');
+          placeholder.classList.add('hidden');
+          removeBtn.classList.remove('hidden');
+          urlInput.value = processedUrl;
+        } else {
+          removeEditItemImage();
+        }
+      }
+    </script>
+    
+    <!-- [JSMOD] x4y_侧边栏切换功能 -->
+    <script id="sidebar-toggle-script">
+      document.addEventListener('DOMContentLoaded', function () {
+        var sidebar = document.querySelector('aside');
+        var toggleButton = document.getElementById('toggle-sidebar');
+        if (!toggleButton || !sidebar) {
+          console.error('侧边栏或切换按钮未找到');
+          return;
+        }
+        var chevronIcon = toggleButton.querySelector('i');
+        var sidebarText = toggleButton.querySelector('span');
+        var isCollapsed = false;
+        
+        // 初始化：给所有文字添加动画类
+        sidebar.querySelectorAll('nav span, #toggle-sidebar span').forEach(function(span) {
+          span.classList.add('sidebar-text');
+        });
+        sidebar.classList.add('sidebar-expanded');
+        
+        toggleButton.addEventListener('click', function () {
+          isCollapsed = !isCollapsed;
+          
+          if (isCollapsed) {
+            // 收起侧边栏
+            sidebar.classList.remove('md:w-64', 'sidebar-expanded');
+            sidebar.classList.add('md:w-16', 'sidebar-collapsed');
+            if (chevronIcon) {
+              chevronIcon.style.transform = 'rotate(180deg)';
+            }
+          } else {
+            // 展开侧边栏
+            sidebar.classList.remove('md:w-16', 'sidebar-collapsed');
+            sidebar.classList.add('md:w-64', 'sidebar-expanded');
+            if (chevronIcon) {
+              chevronIcon.style.transform = 'rotate(0)';
+            }
+          }
+          
+          // 触发图表重绘以适应新宽度
+          setTimeout(function() {
+            if (window.inventoryTrendChart) {
+              window.inventoryTrendChart.resize();
+            }
+            if (window.categoryDistributionChart) {
+              window.categoryDistributionChart.resize();
+            }
+          }, 350);
+        });
+      });
+    </script>
+    <!-- [/JSMOD] x4y_侧边栏切换功能 -- 实现侧边导航栏的展开和收起功能 -->
+    <!-- [JSMOD] y5z_模态框功能 -->
+    <script id="modal-script">
+      document.addEventListener('DOMContentLoaded', function () {
+        var modal = document.getElementById('add-item-modal');
+        var modalContent = document.getElementById('modal-content');
+        var addButton = document.getElementById('add-item-btn');
+        var closeButton = document.getElementById('close-modal');
+        var cancelButton = document.getElementById('cancel-add-item');
+        if (!addButton) {
+          console.error('未找到添加物品按钮');
+          return;
+        }
+        async function openModal() {
+          // 加载类别、供应商和仓库下拉选项
+          if (typeof loadCategoriesForSelect === 'function') {
+            await loadCategoriesForSelect('item-category');
+          }
+          if (typeof loadSuppliersForSelect === 'function') {
+            await loadSuppliersForSelect('item-supplier');
+          }
+          if (typeof loadWarehousesForSelect === 'function') {
+            await loadWarehousesForSelect('item-warehouse');
+          }
+          
+          modal.classList.remove('hidden');
+          // 触发动画
+          setTimeout(function () {
+            modalContent.classList.remove('scale-95', 'opacity-0');
+            modalContent.classList.add('scale-100', 'opacity-100');
+          }, 10);
+          document.body.style.overflow = 'hidden';
+        }
+        function closeModal() {
+          modalContent.classList.remove('scale-100', 'opacity-100');
+          modalContent.classList.add('scale-95', 'opacity-0');
+          setTimeout(function () {
+            modal.classList.add('hidden');
+            document.body.style.overflow = '';
+          }, 300);
+        }
+        addButton.addEventListener('click', openModal);
+        closeButton.addEventListener('click', closeModal);
+        cancelButton.addEventListener('click', closeModal);
+        // 点击模态框外部关闭
+        modal.addEventListener('click', function (e) {
+          if (e.target === modal) {
+            closeModal();
+          }
+        });
+        // ESC键关闭
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+            closeModal();
+          }
+        });
+      });
+    </script>
+    <!-- [/JSMOD] y5z_模态框功能 -- 实现添加物品模态窗口的打开和关闭功能 -->
+    <!-- [JSMOD] z6a_图表渲染功能 -->
+    <script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+    <script id="charts-script">
+      document.addEventListener('DOMContentLoaded', function () {
+        // 库存趋势图表
+        var trendChartDom = document.getElementById('inventory-trend-chart');
+        if (!trendChartDom) {
+          console.error('未找到库存趋势图表容器');
+          return;
+        }
+        window.inventoryTrendChart = echarts.init(trendChartDom);
+        var trendOption = {
+          grid: {
+            left: '3%',
+            right: '4%',
+            bottom: '3%',
+            containLabel: true
+          },
+          tooltip: {
+            trigger: 'axis',
+            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+            borderColor: '#E5E5EA',
+            borderWidth: 1,
+            textStyle: {
+              color: '#1D1D1F'
+            },
+            padding: 10,
+            axisPointer: {
+              type: 'line',
+              lineStyle: {
+                color: '#E5E5EA'
+              }
+            }
+          },
+          xAxis: {
+            type: 'category',
+            data: ['1月', '2月', '3月', '4月', '5月', '6月'],
+            axisLine: {
+              lineStyle: {
+                color: '#E5E5EA'
+              }
+            },
+            axisTick: {
+              show: false
+            },
+            axisLabel: {
+              color: '#8E8E93'
+            }
+          },
+          yAxis: {
+            type: 'value',
+            axisLine: {
+              show: false
+            },
+            axisTick: {
+              show: false
+            },
+            axisLabel: {
+              color: '#8E8E93',
+              formatter: '{value}'
+            },
+            splitLine: {
+              lineStyle: {
+                color: '#F5F7FA'
+              }
+            }
+          },
+          series: [{
+            name: '入库',
+            type: 'line',
+            data: [120, 190, 130, 240, 180, 210],
+            smooth: true,
+            lineStyle: {
+              width: 2,
+              color: '#007AFF'
+            },
+            symbol: 'circle',
+            symbolSize: 6,
+            itemStyle: {
+              color: '#007AFF',
+              borderWidth: 2,
+              borderColor: '#fff'
+            },
+            areaStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{
+                offset: 0,
+                color: 'rgba(0, 122, 255, 0.2)'
+              }, {
+                offset: 1,
+                color: 'rgba(0, 122, 255, 0)'
+              }])
+            }
+          }, {
+            name: '出库',
+            type: 'line',
+            data: [90, 160, 110, 200, 150, 180],
+            smooth: true,
+            lineStyle: {
+              width: 2,
+              color: '#FF3B30'
+            },
+            symbol: 'circle',
+            symbolSize: 6,
+            itemStyle: {
+              color: '#FF3B30',
+              borderWidth: 2,
+              borderColor: '#fff'
+            },
+            areaStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{
+                offset: 0,
+                color: 'rgba(255, 59, 48, 0.2)'
+              }, {
+                offset: 1,
+                color: 'rgba(255, 59, 48, 0)'
+              }])
+            }
+          }]
+        };
+        window.inventoryTrendChart.setOption(trendOption);
+        // 类别分布图表
+        var categoryChartDom = document.getElementById('category-distribution-chart');
+        if (!categoryChartDom) {
+          console.error('未找到类别分布图表容器');
+          return;
+        }
+        window.categoryDistributionChart = echarts.init(categoryChartDom);
+        var categoryOption = {
+          tooltip: {
+            trigger: 'item',
+            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+            borderColor: '#E5E5EA',
+            borderWidth: 1,
+            textStyle: {
+              color: '#1D1D1F'
+            },
+            padding: 10,
+            formatter: '{b}: {c} ({d}%)'
+          },
+          series: [{
+            type: 'pie',
+            radius: '70%',
+            center: ['50%', '50%'],
+            data: [{
+              value: 350,
+              name: '电子设备',
+              itemStyle: {
+                color: '#007AFF'
+              }
+            }, {
+              value: 280,
+              name: '办公用品',
+              itemStyle: {
+                color: '#5AC8FA'
+              }
+            }, {
+              value: 220,
+              name: '原材料',
+              itemStyle: {
+                color: '#FF9500'
+              }
+            }, {
+              value: 200,
+              name: '成品',
+              itemStyle: {
+                color: '#34C759'
+              }
+            }, {
+              value: 150,
+              name: '包装材料',
+              itemStyle: {
+                color: '#5856D6'
+              }
+            }, {
+              value: 84,
+              name: '其他',
+              itemStyle: {
+                color: '#8E8E93'
+              }
+            }],
+            label: {
+              show: false
+            },
+            emphasis: {
+              scale: true,
+              itemStyle: {
+                shadowBlur: 10,
+                shadowOffsetX: 0,
+                shadowColor: 'rgba(0, 0, 0, 0.1)'
+              }
+            }
+          }]
+        };
+        window.categoryDistributionChart.setOption(categoryOption);
+        // 监听窗口大小变化，调整图表大小
+        window.addEventListener('resize', function () {
+          if (window.inventoryTrendChart) {
+            window.inventoryTrendChart.resize();
+          }
+          if (window.categoryDistributionChart) {
+            window.categoryDistributionChart.resize();
+          }
+        });
+
+        // 初始调整图表大小
+        setTimeout(function () {
+          if (window.inventoryTrendChart) {
+            window.inventoryTrendChart.resize();
+          }
+          if (window.categoryDistributionChart) {
+            window.categoryDistributionChart.resize();
+          }
+        }, 100);
+      });
+    </script>
+    <!-- [/JSMOD] z6a_图表渲染功能 -- 使用echarts渲染库存趋势和类别分布图表 -->
+    <!-- [JSMOD] API服务层和页面导航 -->
+    <!-- 已移至外部文件: /static/js/api.js 和 /static/js/app.js -->
+    <!-- [/JSMOD] API服务层和页面导航 -->
+    
+    <!-- API客户端 -->
+    <script src="/static/js/api-service.js?v=29"></script>
+    
+    <!-- 应用主脚本 -->
+    <script src="/static/js/app.js?v=29"></script>
+    
+    <!-- 强制初始化导航 -->
+    <script>
+      // 确保导航事件被绑定
+      window.addEventListener('load', function() {
+        console.log('🔧 强制初始化导航...');
+        
+        // 检查导航项
+        const navItems = document.querySelectorAll('.nav-item');
+        console.log(`📊 找到 ${navItems.length} 个导航项`);
+        
+        if (navItems.length === 0) {
+          console.error('❌ 没有找到导航项！检查HTML中是否有 .nav-item 类');
+          return;
+        }
+        
+        // 手动绑定点击事件
+        navItems.forEach((item, index) => {
+          const pageId = item.getAttribute('data-page');
+          console.log(`  [${index}] 绑定导航: ${pageId}`);
+          
+          // 移除旧的事件监听器（如果有）
+          const newItem = item.cloneNode(true);
+          item.parentNode.replaceChild(newItem, item);
+          
+          // 添加新的事件监听器
+          newItem.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            console.log(`🖱️ 点击导航: ${pageId}`);
+            
+            // 隐藏所有页面
+            document.querySelectorAll('[id$="-page"]').forEach(page => {
+              page.classList.add('hidden');
+            });
+            
+            // 显示目标页面
+            const targetPage = document.getElementById(pageId);
+            if (targetPage) {
+              targetPage.classList.remove('hidden');
+              console.log(`✅ 显示页面: ${pageId}`);
+            } else {
+              console.error(`❌ 找不到页面: ${pageId}`);
+            }
+            
+            // 更新导航状态
+            document.querySelectorAll('.nav-item').forEach(nav => {
+              nav.classList.remove('bg-primary/10', 'text-primary');
+              nav.classList.add('text-gray-dark', 'hover:bg-light');
+            });
+            
+            newItem.classList.remove('text-gray-dark', 'hover:bg-light');
+            newItem.classList.add('bg-primary/10', 'text-primary');
+            
+            // 加载页面数据
+            if (window.App && window.App.PageManager) {
+              window.App.PageManager.loadPageData(pageId);
+            }
+          });
+        });
+        
+        console.log('✅ 导航初始化完成！');
+      });
+    </script>
+    
+    <!-- 文件上传功能 -->
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('item-image-input');
+        const imagePreview = document.getElementById('image-preview');
+        const previewImg = document.getElementById('preview-img');
+        const imageName = document.getElementById('image-name');
+        const removeBtn = document.getElementById('remove-image');
+        
+        let selectedFile = null;
+        const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+        const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png'];
+        
+        // 点击上传区域触发文件选择
+        uploadArea.addEventListener('click', function() {
+          fileInput.click();
+        });
+        
+        // 文件选择处理
+        fileInput.addEventListener('change', function(e) {
+          const file = e.target.files[0];
+          if (file) {
+            handleFile(file);
+          }
+        });
+        
+        // 拖拽进入
+        uploadArea.addEventListener('dragover', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          uploadArea.classList.add('border-primary', 'bg-primary/5');
+          uploadArea.classList.remove('border-gray-light');
+        });
+        
+        // 拖拽离开
+        uploadArea.addEventListener('dragleave', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          uploadArea.classList.remove('border-primary', 'bg-primary/5');
+          uploadArea.classList.add('border-gray-light');
+        });
+        
+        // 放置文件
+        uploadArea.addEventListener('drop', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          uploadArea.classList.remove('border-primary', 'bg-primary/5');
+          uploadArea.classList.add('border-gray-light');
+          
+          const files = e.dataTransfer.files;
+          if (files.length > 0) {
+            handleFile(files[0]);
+          }
+        });
+        
+        // 处理文件
+        function handleFile(file) {
+          // 验证文件类型
+          if (!ALLOWED_TYPES.includes(file.type)) {
+            showNotification('error', '只支持 JPG 和 PNG 格式的图片');
+            return;
+          }
+          
+          // 验证文件大小
+          if (file.size > MAX_FILE_SIZE) {
+            showNotification('error', '图片大小不能超过 5MB');
+            return;
+          }
+          
+          selectedFile = file;
+          
+          // 读取并预览图片
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            previewImg.src = e.target.result;
+            imageName.textContent = file.name + ' (' + formatFileSize(file.size) + ')';
+            
+            // 显示预览，隐藏上传区域
+            uploadArea.classList.add('hidden');
+            imagePreview.classList.remove('hidden');
+            
+            showNotification('success', '图片上传成功');
+          };
+          reader.readAsDataURL(file);
+        }
+        
+        // 移除图片
+        removeBtn.addEventListener('click', function() {
+          selectedFile = null;
+          fileInput.value = '';
+          previewImg.src = '';
+          imageName.textContent = '';
+          
+          // 隐藏预览，显示上传区域
+          imagePreview.classList.add('hidden');
+          uploadArea.classList.remove('hidden');
+        });
+        
+        // 格式化文件大小
+        function formatFileSize(bytes) {
+          if (bytes === 0) return '0 Bytes';
+          const k = 1024;
+          const sizes = ['Bytes', 'KB', 'MB'];
+          const i = Math.floor(Math.log(bytes) / Math.log(k));
+          return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+        
+        // 显示通知
+        function showNotification(type, message) {
+          const colors = {
+            success: 'bg-success',
+            error: 'bg-danger',
+            warning: 'bg-warning',
+            info: 'bg-primary'
+          };
+          
+          const notification = document.createElement('div');
+          notification.className = `fixed top-20 right-4 ${colors[type]} text-white px-6 py-3 rounded-apple shadow-apple-hover z-50 animate-fade-in`;
+          notification.innerHTML = `
+            <div class="flex items-center space-x-2">
+              <i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-times-circle' : 'fa-info-circle'}"></i>
+              <span>${message}</span>
+            </div>
+          `;
+          
+          document.body.appendChild(notification);
+          
+          setTimeout(() => {
+            notification.style.opacity = '0';
+            notification.style.transition = 'opacity 0.3s';
+            setTimeout(() => notification.remove(), 300);
+          }, 3000);
+        }
+        
+        // 添加物品表单 - 仓库容量实时验证
+        const itemWarehouseSelect = document.getElementById('item-warehouse');
+        const itemStockInput = document.getElementById('item-stock');
+        const capacityHint = document.getElementById('item-warehouse-capacity-hint');
+        const stockError = document.getElementById('item-stock-error');
+        
+        // 存储仓库容量信息
+        let warehouseCapacityMap = {};
+        
+        // 监听仓库选择变化
+        if (itemWarehouseSelect) {
+          itemWarehouseSelect.addEventListener('change', function() {
+            validateItemStock();
+          });
+        }
+        
+        // 监听库存数量变化
+        if (itemStockInput) {
+          itemStockInput.addEventListener('input', function() {
+            validateItemStock();
+          });
+        }
+        
+        // 验证库存数量是否超过仓库容量
+        function validateItemStock() {
+          if (!itemWarehouseSelect || !itemStockInput || !capacityHint || !stockError) return true;
+          
+          const selectedOption = itemWarehouseSelect.options[itemWarehouseSelect.selectedIndex];
+          const stock = parseInt(itemStockInput.value) || 0;
+          
+          // 隐藏错误提示
+          stockError.classList.add('hidden');
+          capacityHint.classList.add('hidden');
+          itemStockInput.classList.remove('border-danger');
+          
+          if (!selectedOption || !selectedOption.value) return true;
+          
+          // 从选项的data属性获取容量信息
+          const capacity = parseInt(selectedOption.dataset.capacity) || 0;
+          const currentUsage = parseInt(selectedOption.dataset.currentUsage) || 0;
+          const available = capacity - currentUsage;
+          
+          if (capacity > 0) {
+            capacityHint.textContent = `仓库容量: ${capacity}，已使用: ${currentUsage}，可用: ${Math.max(0, available)}`;
+            capacityHint.classList.remove('hidden');
+            
+            if (stock > available) {
+              stockError.textContent = `库存数量(${stock})超过仓库可用容量(${available})！`;
+              stockError.classList.remove('hidden');
+              itemStockInput.classList.add('border-danger');
+              return false;
+            }
+          }
+          
+          return true;
+        }
+        
+        // 表单提交处理
+        const addItemForm = document.getElementById('add-item-form');
+        const submitBtn = document.getElementById('submit-item-btn');
+        
+        if (addItemForm) {
+          addItemForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // 先验证仓库容量
+            if (!validateItemStock()) {
+              showNotification('error', '库存数量超过仓库可用容量，请调整！');
+              return;
+            }
+            
+            // 禁用提交按钮
+            if (submitBtn) {
+              submitBtn.disabled = true;
+              submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>保存中...';
+            }
+            
+            try {
+              // 收集表单数据
+              const formData = new FormData(addItemForm);
+              
+              // 如果有选择的文件，添加到FormData
+              if (selectedFile) {
+                formData.set('image', selectedFile);
+              }
+              
+              console.log('📤 提交表单数据:', Object.fromEntries(formData));
+              
+              // 调用API创建物品 - 使用TokenManager获取token
+              let token = null;
+              if (window.TokenManager && typeof window.TokenManager.getToken === 'function') {
+                token = window.TokenManager.getToken();
+              } else {
+                token = localStorage.getItem('token') || sessionStorage.getItem('token');
+              }
+              
+              console.log('🔑 Token:', token ? '已获取' : '未找到');
+              
+              if (!token) {
+                showNotification('error', '登录已过期，请重新登录');
+                setTimeout(() => window.location.href = '/login/', 1000);
+                return;
+              }
+              
+              const headers = {
+                'Authorization': 'Bearer ' + token
+              };
+              
+              const response = await fetch('/api/inventory/items/', {
+                method: 'POST',
+                headers: headers,
+                body: formData
+              });
+              
+              const result = await response.json();
+              console.log('📥 API响应:', result);
+              console.log('📥 HTTP状态码:', response.status);
+              
+              if (response.ok && result.success) {
+                showNotification('success', '物品添加成功！');
+                
+                // 重置表单
+                addItemForm.reset();
+                if (removeBtn) removeBtn.click();
+                
+                // 关闭模态框
+                setTimeout(() => {
+                  document.getElementById('cancel-add-item').click();
+                  
+                  // 清除缓存
+                  if (window.Utils && window.Utils.clearCache) {
+                    window.Utils.clearCache();
+                  }
+                  
+                  // 刷新物品列表
+                  if (window.ItemsController) {
+                    window.ItemsController.loadData(1, true);
+                  } else if (window.App && window.App.ItemsController) {
+                    window.App.ItemsController.loadData(1, true);
+                  }
+                  
+                  // 刷新仪表盘数据（统计卡片、图表、最近活动、低库存物品）
+                  if (window.DashboardController) {
+                    window.DashboardController.loadData(true);
+                    console.log('✅ 仪表盘数据已刷新');
+                  } else if (window.App && window.App.DashboardController) {
+                    window.App.DashboardController.loadData(true);
+                    console.log('✅ 仪表盘数据已刷新');
+                  }
+                }, 500);
+              } else {
+                // 显示详细错误信息
+                console.error('❌ API错误详情:', result);
+                let errorMsg = '添加失败';
+                
+                // 解析错误详情的辅助函数
+                function parseErrorDetails(details) {
+                  const errors = [];
+                  for (const [key, value] of Object.entries(details)) {
+                    if (Array.isArray(value)) {
+                      errors.push(`${key}: ${value.join(', ')}`);
+                    } else if (typeof value === 'object') {
+                      errors.push(`${key}: ${JSON.stringify(value)}`);
+                    } else {
+                      errors.push(`${key}: ${value}`);
+                    }
+                  }
+                  return errors.join('; ');
+                }
+                
+                if (result.error) {
+                  if (typeof result.error === 'string') {
+                    errorMsg = result.error;
+                  } else if (result.error.details) {
+                    // 验证错误格式
+                    errorMsg = parseErrorDetails(result.error.details);
+                  } else if (result.error.message) {
+                    errorMsg = result.error.message;
+                  } else if (result.error.detail) {
+                    errorMsg = result.error.detail;
+                  } else if (typeof result.error === 'object') {
+                    // 处理其他对象格式的错误
+                    errorMsg = parseErrorDetails(result.error);
+                  }
+                } else if (result.detail) {
+                  // DRF 默认错误格式
+                  errorMsg = result.detail;
+                } else if (result.message && typeof result.message === 'string') {
+                  errorMsg = result.message;
+                } else if (result.errors) {
+                  errorMsg = parseErrorDetails(result.errors);
+                } else if (typeof result === 'object' && !result.success) {
+                  // 尝试解析整个响应对象
+                  const keys = Object.keys(result).filter(k => k !== 'success');
+                  if (keys.length > 0) {
+                    const errorDetails = {};
+                    keys.forEach(k => errorDetails[k] = result[k]);
+                    errorMsg = parseErrorDetails(errorDetails);
+                  }
+                }
+                
+                showNotification('error', errorMsg || '添加失败');
+              }
+            } catch (error) {
+              console.error('❌ 提交失败:', error);
+              showNotification('error', '网络错误: ' + error.message);
+            } finally {
+              // 恢复提交按钮
+              if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '保存物品';
+              }
+            }
+          });
+        }
+      });
+    </script>
+    
+    <!-- 用户菜单和通知功能已在 app.js 中实现 -->
+    
+    <!-- 扫码入库功能 -->
+    <script src="/static/js/barcode-scanner.js?v=3"></script>
+    
+    <!-- 移动端底部导航栏 -->
+    <nav id="mobile-bottom-nav">
+      <div class="nav-items">
+        <a href="javascript:void(0);" data-page="dashboard-page" class="nav-item active">
+          <i class="fas fa-tachometer-alt"></i>
+          <span>仪表盘</span>
+        </a>
+        <a href="javascript:void(0);" data-page="items-page" class="nav-item">
+          <i class="fas fa-box"></i>
+          <span>物品</span>
+        </a>
+        <a href="javascript:void(0);" onclick="openScanInbound()" class="nav-item" style="color: #34C759;">
+          <i class="fas fa-qrcode"></i>
+          <span>扫码</span>
+        </a>
+        <a href="javascript:void(0);" data-page="inbound-page" class="nav-item">
+          <i class="fas fa-shopping-cart"></i>
+          <span>入库</span>
+        </a>
+        <a href="javascript:void(0);" data-page="outbound-page" class="nav-item">
+          <i class="fas fa-shipping-fast"></i>
+          <span>出库</span>
+        </a>
+      </div>
+    </nav>
+    
+    <!-- 移动端导航切换脚本 -->
+    <script>
+      // 移动端搜索功能
+      function openMobileSearch() {
+        const overlay = document.getElementById('mobile-search-overlay');
+        if (overlay) {
+          overlay.classList.add('active');
+          document.getElementById('mobile-search-input')?.focus();
+        }
+      }
+      
+      function closeMobileSearch() {
+        const overlay = document.getElementById('mobile-search-overlay');
+        if (overlay) {
+          overlay.classList.remove('active');
+        }
+      }
+      
+      let mobileSearchTimer = null;
+      function handleMobileSearch(query) {
+        clearTimeout(mobileSearchTimer);
+        const resultsContainer = document.getElementById('mobile-search-results');
+        
+        if (!query || query.length < 2) {
+          resultsContainer.innerHTML = `
+            <div class="text-center text-gray-dark py-8">
+              <i class="fas fa-search text-3xl mb-2"></i>
+              <p>输入关键词搜索物品</p>
+            </div>
+          `;
+          return;
+        }
+        
+        resultsContainer.innerHTML = `
+          <div class="text-center text-gray-dark py-8">
+            <i class="fas fa-spinner fa-spin text-2xl"></i>
+          </div>
+        `;
+        
+        mobileSearchTimer = setTimeout(async () => {
+          try {
+            const response = await fetch(`/api/inventory/items/?search=${encodeURIComponent(query)}`);
+            const data = await response.json();
+            const items = data.data?.results || data.results || [];
+            
+            if (items.length === 0) {
+              resultsContainer.innerHTML = `
+                <div class="text-center text-gray-dark py-8">
+                  <i class="fas fa-inbox text-3xl mb-2"></i>
+                  <p>未找到相关物品</p>
+                </div>
+              `;
+              return;
+            }
+            
+            resultsContainer.innerHTML = items.map(item => `
+              <div class="bg-white rounded-lg p-3 shadow-sm flex items-center space-x-3" onclick="goToItemDetail(${item.id})">
+                <div class="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                  ${item.image ? `<img src="${item.image}" class="w-full h-full object-cover rounded-lg">` : '<i class="fas fa-box text-gray-400"></i>'}
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="font-medium truncate">${item.name}</p>
+                  <p class="text-sm text-gray-dark">${item.code || ''}</p>
+                </div>
+                <div class="text-right">
+                  <p class="font-semibold">${item.stock || 0}</p>
+                  <p class="text-xs text-gray-dark">库存</p>
+                </div>
+              </div>
+            `).join('');
+          } catch (error) {
+            console.error('Search error:', error);
+            resultsContainer.innerHTML = `
+              <div class="text-center text-danger py-8">
+                <i class="fas fa-exclamation-circle text-3xl mb-2"></i>
+                <p>搜索失败，请重试</p>
+              </div>
+            `;
+          }
+        }, 300);
+      }
+      
+      function goToItemDetail(itemId) {
+        closeMobileSearch();
+        // 切换到物品页面
+        document.querySelectorAll('main > div[id$="-page"]').forEach(page => {
+          page.classList.add('hidden');
+        });
+        document.getElementById('items-page')?.classList.remove('hidden');
+        // 更新导航状态
+        document.querySelectorAll('#mobile-bottom-nav .nav-item').forEach(nav => {
+          nav.classList.remove('active');
+          if (nav.getAttribute('data-page') === 'items-page') {
+            nav.classList.add('active');
+          }
+        });
+      }
+      
+      // 移动端底部导航切换
+      document.querySelectorAll('#mobile-bottom-nav .nav-item[data-page]').forEach(item => {
+        item.addEventListener('click', function(e) {
+          e.preventDefault();
+          const targetPage = this.getAttribute('data-page');
+          if (targetPage) {
+            // 更新底部导航激活状态
+            document.querySelectorAll('#mobile-bottom-nav .nav-item').forEach(nav => {
+              nav.classList.remove('active');
+            });
+            this.classList.add('active');
+            
+            // 切换页面（复用现有的导航逻辑）
+            document.querySelectorAll('main > div[id$="-page"]').forEach(page => {
+              page.classList.add('hidden');
+            });
+            const targetElement = document.getElementById(targetPage);
+            if (targetElement) {
+              targetElement.classList.remove('hidden');
+            }
+            
+            // 同步侧边栏状态
+            document.querySelectorAll('aside .nav-item').forEach(nav => {
+              nav.classList.remove('bg-primary/10', 'text-primary');
+              nav.classList.add('text-gray-dark');
+            });
+            const sidebarItem = document.querySelector(`aside .nav-item[data-page="${targetPage}"]`);
+            if (sidebarItem) {
+              sidebarItem.classList.add('bg-primary/10', 'text-primary');
+              sidebarItem.classList.remove('text-gray-dark');
+            }
+          }
+        });
+      });
+      
+      // 监听侧边栏导航变化，同步底部导航状态
+      document.querySelectorAll('aside .nav-item[data-page]').forEach(item => {
+        item.addEventListener('click', function() {
+          const targetPage = this.getAttribute('data-page');
+          document.querySelectorAll('#mobile-bottom-nav .nav-item').forEach(nav => {
+            nav.classList.remove('active');
+            if (nav.getAttribute('data-page') === targetPage) {
+              nav.classList.add('active');
+            }
+          });
+        });
+      });
+    </script>
+    
+    <!-- 黑名单管理功能 -->
+    <script>
+      // 刷新黑名单列表
+      async function refreshBlacklist() {
+        const container = document.getElementById('blacklist-container');
+        if (!container) return;
+        
+        container.innerHTML = `
+          <div class="text-center py-8 text-gray-dark">
+            <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+            <p>加载中...</p>
+          </div>
+        `;
+        
+        // 检查API是否可用
+        if (typeof API === 'undefined' || !API.auth || !API.auth.blacklist) {
+          console.error('API对象未就绪');
+          container.innerHTML = `
+            <div class="text-center py-8 text-danger">
+              <i class="fas fa-exclamation-circle text-2xl mb-2"></i>
+              <p>API未就绪，请刷新页面</p>
+            </div>
+          `;
+          return;
+        }
+        
+        try {
+          const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+          const fetchResponse = await fetch('/api/auth/blacklist/', {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': token ? `Bearer ${token}` : ''
+            }
+          });
+          
+          const response = await fetchResponse.json();
+          
+          if (response.success) {
+            const items = response.data || [];
+            
+            if (items.length === 0) {
+              container.innerHTML = `
+                <div class="text-center py-8 text-gray-dark">
+                  <i class="fas fa-check-circle text-success text-3xl mb-2"></i>
+                  <p>暂无被锁定的账户</p>
+                </div>
+              `;
+              return;
+            }
+            
+            container.innerHTML = items.map(item => `
+              <div class="flex items-center justify-between p-3 bg-danger/5 rounded-lg border border-danger/20">
+                <div class="flex items-center space-x-3">
+                  <div class="w-10 h-10 rounded-full bg-danger/10 flex items-center justify-center">
+                    <i class="fas fa-user-lock text-danger"></i>
+                  </div>
+                  <div>
+                    <p class="font-medium text-sm">${item.username}</p>
+                    <p class="text-xs text-gray-dark">IP: ${item.ip} | 尝试: ${item.attempts}次</p>
+                  </div>
+                </div>
+                <button onclick="removeFromBlacklist('${item.key}')" class="p-2 text-success hover:bg-success/10 rounded-lg transition-colors" title="解除锁定">
+                  <i class="fas fa-unlock"></i>
+                </button>
+              </div>
+            `).join('');
+          } else {
+            container.innerHTML = `
+              <div class="text-center py-8 text-danger">
+                <i class="fas fa-exclamation-circle text-2xl mb-2"></i>
+                <p>加载失败</p>
+              </div>
+            `;
+          }
+        } catch (error) {
+          console.error('加载黑名单失败:', error);
+          container.innerHTML = `
+            <div class="text-center py-8 text-danger">
+              <i class="fas fa-exclamation-circle text-2xl mb-2"></i>
+              <p>加载失败</p>
+            </div>
+          `;
+        }
+      }
+      
+      // 添加到黑名单
+      async function addToBlacklist() {
+        const input = document.getElementById('blacklist-input');
+        const target = input?.value?.trim();
+        
+        if (!target) {
+          alert('请输入用户名或IP地址');
+          return;
+        }
+        
+        try {
+          const response = await API.auth.blacklistAdd(target);
+          
+          if (response.success) {
+            input.value = '';
+            alert(response.message || '添加成功');
+            refreshBlacklist();
+          } else {
+            alert(response.error?.message || response.message || '添加失败');
+          }
+        } catch (error) {
+          console.error('添加黑名单失败:', error);
+          alert('添加失败');
+        }
+      }
+      
+      // 从黑名单移除
+      async function removeFromBlacklist(key) {
+        if (!confirm('确定要解除此账户的锁定吗？')) return;
+        
+        try {
+          const response = await API.auth.blacklistRemove(key);
+          
+          if (response.success) {
+            refreshBlacklist();
+          } else {
+            alert(response.error?.message || response.message || '移除失败');
+          }
+        } catch (error) {
+          console.error('移除黑名单失败:', error);
+          alert('移除失败');
+        }
+      }
+      
+      // 清空所有黑名单
+      async function clearAllBlacklist() {
+        if (!confirm('确定要清空所有黑名单吗？这将解除所有被锁定账户的限制。')) return;
+        
+        try {
+          const response = await API.auth.blacklistClear();
+          
+          if (response.success) {
+            alert(response.message || '已清空所有黑名单');
+            refreshBlacklist();
+          } else {
+            alert(response.error?.message || response.message || '清空失败');
+          }
+        } catch (error) {
+          console.error('清空黑名单失败:', error);
+          alert('清空失败');
+        }
+      }
+      
+      // 当切换到设置页面时自动加载黑名单
+      (function() {
+        let blacklistLoaded = false;
+        
+        function checkAndLoadBlacklist() {
+          const settingsPage = document.getElementById('settings-page');
+          if (settingsPage && !settingsPage.classList.contains('hidden')) {
+            if (!blacklistLoaded) {
+              blacklistLoaded = true;
+              refreshBlacklist();
+            }
+          } else {
+            blacklistLoaded = false;
+          }
+        }
+        
+        // 使用MutationObserver监听设置页面的显示/隐藏
+        document.addEventListener('DOMContentLoaded', function() {
+          const settingsPage = document.getElementById('settings-page');
+          if (settingsPage) {
+            const observer = new MutationObserver(function(mutations) {
+              mutations.forEach(function(mutation) {
+                if (mutation.attributeName === 'class') {
+                  checkAndLoadBlacklist();
+                }
+              });
+            });
+            
+            observer.observe(settingsPage, { attributes: true });
+          }
+          
+          // 监听所有设置页面导航点击
+          document.querySelectorAll('[data-page="settings-page"]').forEach(nav => {
+            nav.addEventListener('click', function() {
+              setTimeout(checkAndLoadBlacklist, 100);
+            });
+          });
+          
+          // 初始检查
+          setTimeout(checkAndLoadBlacklist, 500);
+        });
+      })();
+    </script>
+  </body>
+</html>

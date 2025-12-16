@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - 库存管理系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"/>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#007AFF',
+                        secondary: '#5AC8FA',
+                        success: '#34C759',
+                        danger: '#FF3B30',
+                    }
+                }
+            }
+        };
+    </script>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-md">
+        <!-- Logo -->
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-16 h-16 bg-primary rounded-2xl mb-4">
+                <i class="fas fa-boxes text-white text-2xl"></i>
+            </div>
+            <h1 class="text-3xl font-bold text-gray-800">库存管理系统</h1>
+            <p class="text-gray-600 mt-2">欢迎回来，请登录您的账户</p>
+        </div>
+
+        <!-- 登录表单 -->
+        <div class="bg-white rounded-2xl shadow-xl p-8">
+            <form id="login-form" class="space-y-6">
+                <!-- 用户名 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-user mr-2"></i>用户名
+                    </label>
+                    <input
+                        type="text"
+                        id="username"
+                        name="username"
+                        required
+                        class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                        placeholder="请输入用户名"
+                    />
+                </div>
+
+                <!-- 密码 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-lock mr-2"></i>密码
+                    </label>
+                    <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        required
+                        class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                        placeholder="请输入密码"
+                    />
+                </div>
+
+                <!-- 记住我 -->
+                <div class="flex items-center justify-between">
+                    <label class="flex items-center cursor-pointer">
+                        <input type="checkbox" id="remember-me" class="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary">
+                        <span class="ml-2 text-sm text-gray-600">记住我（24小时内免登录）</span>
+                    </label>
+                </div>
+
+                <!-- 登录按钮 -->
+                <button
+                    type="submit"
+                    class="w-full bg-primary text-white py-3 rounded-xl font-medium hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+                >
+                    <i class="fas fa-sign-in-alt mr-2"></i>登录
+                </button>
+            </form>
+        </div>
+
+        <!-- 底部版权 -->
+        <div class="text-center mt-6">
+            <p class="text-xs text-gray-500">
+                © 2025 库存管理系统. All rights reserved.
+            </p>
+        </div>
+    </div>
+
+    <!-- API客户端 -->
+    <script src="/static/js/api-service.js?v=2"></script>
+
+    <!-- 登录逻辑 - 企业级安全 -->
+    <script>
+        // 错误提示元素
+        let errorDiv = null;
+        
+        function showError(message) {
+            if (!errorDiv) {
+                errorDiv = document.createElement('div');
+                document.getElementById('login-form').appendChild(errorDiv);
+            }
+            errorDiv.className = 'mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm';
+            errorDiv.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>' + message;
+            errorDiv.style.display = 'block';
+        }
+        
+        function showLockedError(message) {
+            if (!errorDiv) {
+                errorDiv = document.createElement('div');
+                document.getElementById('login-form').appendChild(errorDiv);
+            }
+            // IP锁定使用更醒目的样式
+            errorDiv.className = 'mt-4 p-4 bg-orange-50 border-2 border-orange-300 rounded-xl text-orange-700 text-sm';
+            errorDiv.innerHTML = `
+                <div class="flex items-start">
+                    <i class="fas fa-shield-alt text-orange-500 text-xl mr-3 mt-0.5"></i>
+                    <div>
+                        <p class="font-semibold mb-1">安全提醒</p>
+                        <p>${message}</p>
+                        <p class="mt-2 text-xs text-orange-600">如需立即解锁，请联系系统管理员</p>
+                    </div>
+                </div>
+            `;
+            errorDiv.style.display = 'block';
+        }
+        
+        function hideError() {
+            if (errorDiv) {
+                errorDiv.style.display = 'none';
+            }
+        }
+        
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            hideError();
+            
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const rememberMe = document.getElementById('remember-me').checked;
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            
+            // 前端验证
+            if (!username || !password) {
+                showError('请输入用户名和密码');
+                return;
+            }
+            
+            if (username.length < 3) {
+                showError('用户名至少3个字符');
+                return;
+            }
+            
+            // 显示加载状态
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>登录中...';
+            
+            try {
+                const result = await API.auth.login(username, password);
+                
+                if (result.success) {
+                    // 根据"记住我"选项决定存储方式
+                    if (rememberMe) {
+                        // 记住我：存储到localStorage，设置24小时过期时间
+                        const expireTime = Date.now() + 24 * 60 * 60 * 1000; // 24小时
+                        localStorage.setItem('token', result.data.token);
+                        localStorage.setItem('refresh_token', result.data.refresh_token);
+                        localStorage.setItem('user_info', JSON.stringify(result.data.user));
+                        localStorage.setItem('token_expire', expireTime.toString());
+                        localStorage.setItem('remember_me', 'true');
+                        // 清除sessionStorage
+                        sessionStorage.removeItem('token');
+                        sessionStorage.removeItem('refresh_token');
+                        sessionStorage.removeItem('user_info');
+                    } else {
+                        // 不记住：存储到sessionStorage，关闭浏览器后失效
+                        sessionStorage.setItem('token', result.data.token);
+                        sessionStorage.setItem('refresh_token', result.data.refresh_token);
+                        sessionStorage.setItem('user_info', JSON.stringify(result.data.user));
+                        // 清除localStorage中的登录信息
+                        localStorage.removeItem('token');
+                        localStorage.removeItem('refresh_token');
+                        localStorage.removeItem('user_info');
+                        localStorage.removeItem('token_expire');
+                        localStorage.removeItem('remember_me');
+                    }
+                    
+                    // 显示成功消息
+                    submitBtn.innerHTML = '<i class="fas fa-check mr-2"></i>登录成功！';
+                    submitBtn.classList.remove('bg-primary');
+                    submitBtn.classList.add('bg-green-500');
+                    
+                    // 延迟跳转
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 500);
+                } else {
+                    // 提取错误信息 - 支持多种后端返回格式
+                    let errorMsg = '登录失败';
+                    let isLocked = false;
+                    
+                    console.log('登录返回结果:', result); // 调试用
+                    
+                    // 检查各种可能的错误格式
+                    // 1. error.details.non_field_errors (实际后端返回格式)
+                    if (result.error?.details?.non_field_errors) {
+                        errorMsg = Array.isArray(result.error.details.non_field_errors) 
+                            ? result.error.details.non_field_errors[0] 
+                            : result.error.details.non_field_errors;
+                    }
+                    // 2. details.non_field_errors
+                    else if (result.details?.non_field_errors) {
+                        errorMsg = Array.isArray(result.details.non_field_errors) 
+                            ? result.details.non_field_errors[0] 
+                            : result.details.non_field_errors;
+                    }
+                    // 3. error.non_field_errors
+                    else if (result.error?.non_field_errors) {
+                        errorMsg = Array.isArray(result.error.non_field_errors) 
+                            ? result.error.non_field_errors[0] 
+                            : result.error.non_field_errors;
+                    }
+                    // 4. non_field_errors (直接在根级别)
+                    else if (result.non_field_errors) {
+                        errorMsg = Array.isArray(result.non_field_errors) 
+                            ? result.non_field_errors[0] 
+                            : result.non_field_errors;
+                    }
+                    // 5. details 是字符串
+                    else if (typeof result.details === 'string') {
+                        errorMsg = result.details;
+                    }
+                    // 5. error.detail
+                    else if (result.error?.detail) {
+                        errorMsg = result.error.detail;
+                    }
+                    // 6. detail
+                    else if (result.detail) {
+                        errorMsg = result.detail;
+                    }
+                    // 7. message
+                    else if (result.message && result.message !== '登录失败') {
+                        errorMsg = result.message;
+                    }
+                    
+                    // 检查是否是IP锁定错误
+                    if (errorMsg.includes('锁定') || errorMsg.includes('locked') || errorMsg.includes('IP')) {
+                        isLocked = true;
+                    }
+                    
+                    throw { message: errorMsg, isLocked: isLocked };
+                }
+            } catch (error) {
+                console.error('登录错误:', error);
+                
+                // 恢复按钮
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-sign-in-alt mr-2"></i>登录';
+                
+                // 根据错误类型显示不同样式
+                const errorMsg = error.message || '登录失败，请稍后重试';
+                if (error.isLocked || errorMsg.includes('锁定')) {
+                    showLockedError(errorMsg);
+                } else {
+                    showError(errorMsg);
+                }
+            }
+        });
+        
+        // 页面加载时检查是否已登录
+        window.addEventListener('load', () => {
+            // 防止循环跳转
+            if (window._isCheckingLogin) return;
+            window._isCheckingLogin = true;
+            
+            // 首先检查是否有token
+            const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+            
+            if (!token) {
+                // 没有token，停留在登录页
+                console.log('未登录，请输入账号密码');
+                return;
+            }
+            
+            // 如果是"记住我"模式，检查是否过期
+            const rememberMe = localStorage.getItem('remember_me');
+            const tokenExpire = localStorage.getItem('token_expire');
+            
+            if (rememberMe === 'true' && tokenExpire) {
+                const expireTime = parseInt(tokenExpire);
+                if (Date.now() > expireTime) {
+                    // Token已过期，清除所有登录信息
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('refresh_token');
+                    localStorage.removeItem('user_info');
+                    localStorage.removeItem('token_expire');
+                    localStorage.removeItem('remember_me');
+                    sessionStorage.removeItem('token');
+                    sessionStorage.removeItem('refresh_token');
+                    sessionStorage.removeItem('user_info');
+                    console.log('登录已过期，请重新登录');
+                    return;
+                }
+            }
+            
+            // 有有效token，跳转到主页
+            console.log('已登录，跳转到主页');
+            window.location.href = '/';
+        });
+        
+        // 防止表单自动填充攻击
+        document.getElementById('username').setAttribute('autocomplete', 'off');
+        document.getElementById('password').setAttribute('autocomplete', 'new-password');
+    </script>
+</body>
+</html>

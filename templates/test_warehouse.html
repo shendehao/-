@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试仓库显示</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-4xl mx-auto bg-white rounded-lg shadow p-6">
+        <h1 class="text-2xl font-bold mb-4">测试仓库名称显示</h1>
+        
+        <button onclick="testAPI()" class="bg-blue-500 text-white px-4 py-2 rounded mb-4">
+            测试API
+        </button>
+        
+        <div id="result" class="mt-4"></div>
+        
+        <div id="table-container" class="mt-6"></div>
+    </div>
+    
+    <script>
+        async function testAPI() {
+            const resultDiv = document.getElementById('result');
+            const tableDiv = document.getElementById('table-container');
+            
+            try {
+                resultDiv.innerHTML = '<p class="text-blue-500">正在加载...</p>';
+                
+                // 调用API
+                const response = await fetch('/api/inventory/items/?page=1&page_size=5');
+                const data = await response.json();
+                
+                console.log('API返回数据:', data);
+                
+                if (data.success && data.data) {
+                    const items = data.data.results || data.data;
+                    
+                    // 显示原始JSON
+                    resultDiv.innerHTML = `
+                        <h3 class="font-bold mb-2">API返回的原始数据：</h3>
+                        <pre class="bg-gray-100 p-4 rounded overflow-auto text-xs">${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                    
+                    // 显示表格
+                    if (items.length > 0) {
+                        let tableHTML = `
+                            <h3 class="font-bold mb-2 mt-4">物品列表：</h3>
+                            <table class="w-full border">
+                                <thead class="bg-gray-200">
+                                    <tr>
+                                        <th class="border p-2">物品名称</th>
+                                        <th class="border p-2">类别</th>
+                                        <th class="border p-2">仓库ID</th>
+                                        <th class="border p-2">仓库名称</th>
+                                        <th class="border p-2">仓位</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                        `;
+                        
+                        items.forEach(item => {
+                            tableHTML += `
+                                <tr>
+                                    <td class="border p-2">${item.name}</td>
+                                    <td class="border p-2">${item.category_name || '-'}</td>
+                                    <td class="border p-2">${item.warehouse || '-'}</td>
+                                    <td class="border p-2 font-bold text-blue-600">${item.warehouse_name || '❌ 未返回'}</td>
+                                    <td class="border p-2">${item.warehouse_location || '-'}</td>
+                                </tr>
+                            `;
+                        });
+                        
+                        tableHTML += '</tbody></table>';
+                        tableDiv.innerHTML = tableHTML;
+                    }
+                } else {
+                    resultDiv.innerHTML = '<p class="text-red-500">API返回失败</p>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="text-red-500">错误: ${error.message}</p>`;
+                console.error('错误:', error);
+            }
+        }
+        
+        // 页面加载时自动测试
+        window.onload = testAPI;
+    </script>
+</body>
+</html>
